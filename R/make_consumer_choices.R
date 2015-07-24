@@ -17,7 +17,7 @@ make_consumer_choices<-function(city, npeeps){
   meal<-realfish<-overfishing<-overfished<-low.data<-rep(NA,npeeps)
   #Pick meal for each person randomly from seafood choices
   #TODO: vectorize this
-  for(i in 1:nrow(peopledf)){meal[i]<-pick_meal(peopledf$Rest[i])}
+  for(i in 1:nrow(peopledf)){meal[i]<-pick_meal(peopledf$Rest[i], city)}
   peopledf<-cbind(peopledf,meal,realfish,overfishing,overfished,low.data)
   
   #Replace stock numbers with names and pick true fish
@@ -31,7 +31,7 @@ make_consumer_choices<-function(city, npeeps){
   #Match up true fish to stock status data
   for(i in 1:npeeps){
     if(!is.na(peopledf$realfish[i])){
-      indices<-which(str_detect(stock.status[,1],ignore.case(peopledf$realfish[i])))
+      indices<-grep(stock.status[,1], pattern=peopledf$realfish[i], ignore.case=TRUE)
       #If only one stock, use that status
       if(length(indices)==1){
         peopledf$overfishing[i]<-stock.status$Overfishing[indices]

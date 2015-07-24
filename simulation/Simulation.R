@@ -1,7 +1,6 @@
 wd <- "/Users/megsiesiple/Dropbox/Research Derby/regroupemail"
 setwd(wd)
 source("SimulationFunctions.R")
-library(stringr)
 
 #Read in two data sources
 restaurants<-read.csv("restaurants.csv")
@@ -14,7 +13,13 @@ restaurants<-restaurants[,2:7]
 nsims=100
 nPeople=100
 resultsMatChi<-resultsMatNY<-resultsMatHou<-resultsMatLA<-matrix(nrow=nsims,ncol=3)
-
+#Dummy NHANES data - to be populated with true probabilities once we get em
+Chi <- c(.25,.25,.25,.25)
+NY <- c(.25,.2,.3,.25)
+LA <- c(.1,.25,.25,.4)
+Hou <- c(.2,.3,.25,.25)
+NHANES <- cbind(Chi,NY,LA,Hou)
+rownames(NHANES)<-c("Red Snapper","Tuna","Salmon","Atlantic Cod")
 for(i in 1:nsims){
 #Cities must be: Chi, LA, NYC, or Hou
 chicago.df<-make_consumer_choices("Chi",nPeople)
