@@ -1,18 +1,28 @@
-wd <- "/Users/megsiesiple/Dropbox/Research Derby/regroupemail"
-setwd(wd)
-source("SimulationFunctions.R")
+if("Christine" == Sys.info()[["user"]]){
+  setwd("C:/Users/Christine/Documents/GitHub/codloins/R")
+  toload <- list.files()
+  for(i in 1:length(toload)){
+    source(toload[i])    
+  }
+  data.dir <- "C:/Users/Christine/Documents/Dropbox/Seafood Mislabeling/R files and data"
+} else{
+  wd <- "/Users/megsiesiple/Dropbox/Research Derby/regroupemail"
+  setwd(wd)
+  source("SimulationFunctions.R")
+  data.dir <- wd
+}
 
 #Read in two data sources
-restaurants<-read.csv("restaurants.csv")
-percentage.table<-read.csv("MislabelledFishies.csv")
-stock.status<-read.csv("StockStatus.csv")
-restaurants<-cbind(1:201,restaurants)
+restaurants<-read.csv(file.path(data.dir,"restaurants.csv"))
+percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_mcs.csv"))
+stock.status<-read.csv(file.path(data.dir,"StockStatus.csv"))
+# restaurants<-cbind(1:201,restaurants)
+# #Restrict to our four main stocks
+# restaurants<-restaurants[,2:7]
+# resultsMatChi<-resultsMatNY<-resultsMatHou<-resultsMatLA<-matrix(nrow=nsims,ncol=3)
 
-#Restrict to our four main stocks
-restaurants<-restaurants[,2:7]
 nsims=100
 nPeople=100
-resultsMatChi<-resultsMatNY<-resultsMatHou<-resultsMatLA<-matrix(nrow=nsims,ncol=3)
 #Dummy NHANES data - to be populated with true probabilities once we get em
 Chi <- c(.25,.25,.25,.25)
 NY <- c(.25,.2,.3,.25)
