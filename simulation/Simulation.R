@@ -24,25 +24,36 @@ stock.status<-read.csv(file.path(data.dir,"StockStatus.csv"))
 nsims=100
 nPeople=100
 #Dummy NHANES data - to be populated with true probabilities once we get em
-Chi <- c(.25,.25,.25,.25)
-NY <- c(.25,.2,.3,.25)
-LA <- c(.1,.25,.25,.4)
-Hou <- c(.2,.3,.25,.25)
-NHANES <- cbind(Chi,NY,LA,Hou)
+if(length(NHANES.dat)>1){
+  Chi <- c(.25,.25,.25,.25)
+  NY <- c(.25,.2,.3,.25)
+  LA <- c(.1,.25,.25,.4)
+  Hou <- c(.2,.3,.25,.25)
+  NHANES <- cbind(Chi,NY,LA,Hou)  
+} else{
+  NHANES <- matrix(c(.25,.25,.25,.25),4)
+}
 rownames(NHANES)<-c("Red Snapper","Tuna","Salmon","Atlantic Cod")
+
 for(i in 1:nsims){
 #Cities must be: Chi, LA, NYC, or Hou
-chicago.df<-make_consumer_choices("Chi",nPeople)
-print(chicago.df)
-ny.df<-make_consumer_choices("NY",nPeople)
-houston.df<-make_consumer_choices("Hou",nPeople)
-la.df<-make_consumer_choices("LA",nPeople)
-
-resultsMatChi[i,1:3]<-apply(chicago.df[5:7],2,mean,na.rm=T)
-print(resultsMatChi)
-resultsMatHou[i,1:3]<-apply(houston.df[5:7],2,mean,na.rm=T)
-resultsMatLA[i,1:3]<-apply(la.df[5:7],2,mean,na.rm=T)
-resultsMatNY[i,1:3]<-apply(ny.df[5:7],2,mean,na.rm=T)
+  if(ncol(NHANES)>1){
+    chicago.df<-make_consumer_choices("Chi",nPeople)
+    print(chicago.df)
+    ny.df<-make_consumer_choices("NY",nPeople)
+    houston.df<-make_consumer_choices("Hou",nPeople)
+    la.df<-make_consumer_choices("LA",nPeople) 
+    resultsMatChi[i,1:3]<-apply(chicago.df[5:7],2,mean,na.rm=T)
+    print(resultsMatChi)
+    resultsMatHou[i,1:3]<-apply(houston.df[5:7],2,mean,na.rm=T)
+    resultsMatLA[i,1:3]<-apply(la.df[5:7],2,mean,na.rm=T)
+    resultsMatNY[i,1:3]<-apply(ny.df[5:7],2,mean,na.rm=T)
+  } else{
+    usa.df<-make_consumer_choices("USA",nPeople)
+    print(chicago.df)
+    resultsMat[i,1:3]<-apply(usa.df[5:7],2,mean,na.rm=T)
+    print(resultsMat)
+  }
 }
 
 apply(resultsMatChi,2,min)

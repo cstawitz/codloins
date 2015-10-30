@@ -20,7 +20,7 @@ get_true_fish<-function(labelname,numPeople){
   for(i in 1:nrow(probs)){
     p[i]<-runif(1,minp[i],maxp[i])
   }
-  
+  browser()
   #Draw multinomial samples of how many people get each type of fish
   #dependent upon drawn random probability
   num.fish<-rmultinom(1,numPeople,p)

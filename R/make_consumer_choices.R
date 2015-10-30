@@ -8,15 +8,16 @@
 #' @export
 make_consumer_choices<-function(city, npeeps){
   #Match restaurant indices to city
-  restIndices<-switch(city,Chi=1:51,LA=52:101,NY=102:151,Hou=152:201)
+  restIndices<-switch(city,Chi=1:51,LA=52:101,NY=102:151,Hou=152:201,USA=1:200)
   #Pick restaurant for each person
   #Populate Person column with person index, Rest column with chosen restaurant
-  peopledf<-data.frame(Person=1:npeeps,Rest=sample(restIndices,npeeps,replace=T))
+  peopledf<-data.frame(Person=1:npeeps) #,Rest=sample(restIndices,npeeps,replace=T))
   
   #Create vectors for chosen meal, actual fish customer receives, stock status
   meal<-realfish<-overfishing<-overfished<-low.data<-rep(NA,npeeps)
   #Pick meal for each person randomly from seafood choices
   #TODO: vectorize this
+  #browser()
   for(i in 1:nrow(peopledf)){meal[i]<-pick_meal(peopledf$Rest[i], city)}
   peopledf<-cbind(peopledf,meal,realfish,overfishing,overfished,low.data)
   
