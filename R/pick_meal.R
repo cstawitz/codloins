@@ -4,16 +4,16 @@
 #' @return meal = index of fish selected by customer
 #' @author Christine Stawitz
 #' @export
-pick_meal<-function(X, City){
+pick_meal<-function(City, prefs){
   #If there is no region-specific data, use the same probabilities for all people
   if(City=="USA"){
-    probs <- NHANES
+    probs <- prefs
   }else{
     #Probability of each fish is based on NHANES data
     #Vector of probabilities for each city, where rows are seafood type
-    probs <- NHANES[,City]
+    probs <- prefs[,City]
   }
-    if(sum(probs)==1){
+    if(sum(probs$mle)==1){
       p <- runif(1,0,1)
       
       if(City!='USA'){
@@ -25,16 +25,18 @@ pick_meal<-function(X, City){
       }else{
         prob.subset <- probs
       }
-      
+      probs.vect<-prob.subset$mle
       #Make into cumulative probabilities
-      for(i in 2:length(prob.subset)){
-        prob.subset[i]<-sum(prob.subset[c(i-1,i)])
+      for(i in 2:nrow(prob.subset)){
+        probs.vect[i]<-sum(probs.vect[c(i-1,i)])
       }
-      meal <- which(p<prob.subset)[1]+2
+      meal <- which(p<probs.vect)[1]
+      if(meal %in% c(1,5,6)){meal <- sample(2:5,1)}
     }else{
       print(paste("Error! Probabilities for city",City,"sum to",sum(probs),"and should sum to 1."))
       break
     }
-  #Return chosen fish 
+  #Return chosen fish
+
   return(meal)
 }

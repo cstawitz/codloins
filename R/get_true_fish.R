@@ -7,20 +7,18 @@
 #' @export
 get_true_fish<-function(labelname,numPeople){
   #Get probabilities that each ordered fish is each true stock
-  probs<-percentage.table[percentage.table[,1]==labelname,7:13]
+  probs<-percentage.table[percentage.table[,1]==labelname,7:11]
   
   #Get minimum and maximum probs from percentage data
   minp<-maxp<-p<-rep(0,nrow(probs))
   minp<-apply(probs,1,min,na.rm=T)
   maxp<-apply(probs,1,max,na.rm=T)
   #print(minp)
-  
   #Select fish based on probabilities
   #This draws a random uniform number between 0,1
   for(i in 1:nrow(probs)){
     p[i]<-runif(1,minp[i],maxp[i])
   }
-  browser()
   #Draw multinomial samples of how many people get each type of fish
   #dependent upon drawn random probability
   num.fish<-rmultinom(1,numPeople,p)

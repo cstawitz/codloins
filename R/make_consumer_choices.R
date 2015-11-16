@@ -6,7 +6,7 @@
 #' stock status (overfishing?, overfished?, low data?)
 #' @author Christine Stawitz
 #' @export
-make_consumer_choices<-function(city, npeeps){
+make_consumer_choices<-function(city, npeeps, prefs){
   #Match restaurant indices to city
   restIndices<-switch(city,Chi=1:51,LA=52:101,NY=102:151,Hou=152:201,USA=1:200)
   #Pick restaurant for each person
@@ -14,41 +14,36 @@ make_consumer_choices<-function(city, npeeps){
   peopledf<-data.frame(Person=1:npeeps) #,Rest=sample(restIndices,npeeps,replace=T))
   
   #Create vectors for chosen meal, actual fish customer receives, stock status
-  meal<-realfish<-overfishing<-overfished<-low.data<-rep(NA,npeeps)
+  meal<-realfish<-rep(NA,npeeps)
+  realstock<-rep(0,npeeps)
   #Pick meal for each person randomly from seafood choices
   #TODO: vectorize this
   #browser()
-  for(i in 1:nrow(peopledf)){meal[i]<-pick_meal(peopledf$Rest[i], city)}
-  peopledf<-cbind(peopledf,meal,realfish,overfishing,overfished,low.data)
-  
+  for(i in 1:nrow(peopledf)){meal[i]<-pick_meal(city, prefs)}
+  peopledf<-cbind(peopledf,meal,realfish,realstock)
   #Replace stock numbers with names and pick true fish
-  stockNames<-c("Red Snapper","Tuna","Salmon","Atlantic Cod")
-  for(i in 3:6){
-    peopledf$meal[peopledf$meal==i]<-stockNames[i-2]
-    peeps<-which(peopledf$meal==stockNames[i-2])
-    peopledf$realfish[peeps]<-get_true_fish(stockNames[i-2],length(peeps))
+  stockNames<-c("","Tuna","Atlantic Cod","Salmon","Red Snapper")
+  for(i in 2:5){
+    peopledf$meal[peopledf$meal==i]<-stockNames[i]
+    peeps<-which(peopledf$meal==stockNames[i])
+    peopledf$realfish[peeps]<-get_true_fish(stockNames[i],length(peeps))
   }
-  
-  #Match up true fish to stock status data
-  for(i in 1:npeeps){
-    if(!is.na(peopledf$realfish[i])){
-      indices<-grep(stock.status[,1], pattern=peopledf$realfish[i], ignore.case=TRUE)
+ #Match up true fish to stock status data
+  for(j in 1:npeeps){
+    if(!is.na(peopledf$realfish[j])){
+      indices<-grep(stock.status[,"Species"], pattern=peopledf$realfish[j], ignore.case=TRUE)
       #If only one stock, use that status
       if(length(indices)==1){
-        peopledf$overfishing[i]<-stock.status$Overfishing[indices]
-        peopledf$overfished[i]<-stock.status$Overfished[indices]
-        peopledf$low.data[i]<-stock.status$Low.data[indices]
-      }
-      #If more than one stock, randomly sample one
-      if(length(indices)>1){
-        
-        ind.to.use<-sample(indices,1)
-        peopledf$overfishing[i]<-stock.status$Overfishing[ind.to.use]
-        peopledf$overfished[i]<-stock.status$Overfished[ind.to.use]
-        peopledf$low.data[i]<-stock.status$Low.data[ind.to.use]
+        peopledf[j,4]<-indices
+      } else{
+        p <- runif(1,0,1)
+        probs <- stock.status$Landings[indices]
+        for(k in 2:length(probs)){
+          probs[k] <- sum(probs[c(k-1,k)])
+        }
+        peopledf[j,4] <- indices[which(probs>p)[1]]
       }
     }
   }
   return(peopledf)
-  
 }
