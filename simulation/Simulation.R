@@ -1,10 +1,10 @@
-if("Christine" == Sys.info()[["user"]]){
-  setwd("C:/Users/Christine/Documents/GitHub/codloins/R")
+if(grep('Christine',Sys.info()[["user"]])==1){
+  setwd(paste("C:/Users/",Sys.info()[["user"]],"/Documents/GitHub/codloins/R",sep=""))
   toload <- list.files()
   for(i in 1:length(toload)){
     source(toload[i])    
   }
-  data.dir <- "C:/Users/Christine/Documents/Dropbox/Seafood Mislabeling/R files and data"
+  data.dir <- paste("C:/Users/",Sys.info()[["user"]],"/Dropbox/Seafood Mislabeling/R files and data",sep='')
 } else{
   wd <- "/Users/megsiesiple/Dropbox/Research Derby/regroupemail"
   setwd(wd)
@@ -14,12 +14,14 @@ if("Christine" == Sys.info()[["user"]]){
 
 #Read in two data sources
 restaurants<-read.csv(file.path(data.dir,"restaurants.csv"))
-percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_mcs.csv"))
+percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_LongForm.csv"))
 stock.status<-read.csv(file.path(data.dir,"StockStatus.csv"))
 # restaurants<-cbind(1:201,restaurants)
 # #Restrict to our four main stocks
 # restaurants<-restaurants[,2:7]
 # resultsMatChi<-resultsMatNY<-resultsMatHou<-resultsMatLA<-matrix(nrow=nsims,ncol=3)
+
+
 resultsMat <- matrix(nrow=nsims,ncol=5)
 nsims=100
 nPeople=100
