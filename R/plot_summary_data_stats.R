@@ -5,6 +5,8 @@ plotSummaryData <- function(data.table){
 
 makeSampleMap <- function(data.table, filename){
   require("rworldmap")
+  require("maptools")
+  require("RColorBrewer")
   isos <- c("ZAF", "USA", "ITA", "ESP", "GRC", "CAN", "GBR", "GBR","PRT", "IRL", "DEU", "FRA")
   #Find each study that contains each code
   isoVect <- matrix(rep("", nrow(percentage.table)*(length(isos))),nrow=nrow(percentage.table),ncol=length(isos))
@@ -31,11 +33,17 @@ makeSampleMap <- function(data.table, filename){
   isoTot <- cbind(isos,as.numeric(totSamp))
   isoTot <- as.data.frame(rbind(isoTot[-c(7,8),],c("GBR",sum(as.numeric(isoTot[c(7,8),2])))))
   stateTot <- as.data.frame(cbind(states,as.numeric(totState)))
+  isoTot$V2 <- as.integer(levels(isoTot$V2))[isoTot$V2]
+  stateTot$V2 <- as.integer(levels(stateTot$V2))[stateTot$V2]
+  isoTot <- isoTot[-2,]
+  colVect <- pretty(c(stateTot$V2,isoTot$V2))
+  mypal<-brewer.pal(5,"Greens")
   spdf <- joinCountryData2Map(isoTot, joinCode="ISO3", nameJoinColumn="isos")
-  pdf(filename)
-  mapCountryData(spdf, nameColumnToPlot="V2", catMethod="pretty")
-  dev.off()
-}
+  US <- readShapePoly(file.path(data.dir,"states_21basic","states.shp"))
+  spdf2 <- joinData2Map(stateTot,nameMap=US, nameJoinIDMap="STATE_ABBR",nameJoinColumn="states")
+  mapCountryData(spdf, nameColumnToPlot="V2", catMethod=colVect, colourPalette=mypal, mapTitle="Sample Size By Location")
+  mapPolys(spdf2, nameColumnToPlot="V2", catMethod=colVect, add=TRUE, colourPalette=mypal, mapTitle="")
+  }
 
 
 
