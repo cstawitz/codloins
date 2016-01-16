@@ -3,7 +3,7 @@ plotSummaryData <- function(data.table){
   makeSampleMap(data.table, "WorldSampSizeMap.pdf")
 } 
 
-makeSampleMap <- function(data.table, filename){
+makeSampleMaps <- function(data.table, filename){
   require("rworldmap")
   require("maptools")
   require("RColorBrewer")
@@ -43,7 +43,10 @@ makeSampleMap <- function(data.table, filename){
   spdf2 <- joinData2Map(stateTot,nameMap=US, nameJoinIDMap="STATE_ABBR",nameJoinColumn="states")
   mapCountryData(spdf, nameColumnToPlot="V2", catMethod=colVect, colourPalette=mypal, mapTitle="Sample Size By Location")
   mapPolys(spdf2, nameColumnToPlot="V2", catMethod=colVect, add=TRUE, colourPalette=mypal, mapTitle="")
+
   }
+
+
 
 
 
