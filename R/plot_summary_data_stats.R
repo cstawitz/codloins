@@ -7,37 +7,40 @@ makeSampleMaps <- function(data.table, filename){
   require("rworldmap")
   require("maptools")
   require("RColorBrewer")
-  isos <- c("ZAF", "USA", "ITA", "ESP", "GRC", "CAN", "GBR", "GBR","PRT", "IRL", "DEU", "FRA")
+  isos <- c("ZAF", "HKG","USA","PRT", "CHN","CAN","GBR",
+          "ITA", "ESP", "FRA","AUS","GRC","BRA", "IRL","GBR", "IRN","DEU", "EGY","IND")
   #Find each study that contains each code
-  isoVect <- matrix(rep("", nrow(percentage.table)*(length(isos))),nrow=nrow(percentage.table),ncol=length(isos))
+
+  isoVect <- matrix(rep("", nrow(data.table)*(length(isos))),nrow=nrow(data.table),ncol=length(isos))
   totSamp <- rep(0,ncol(isoVect))
-  for(i in 1:length(as.character(unique(percentage.table$Country.of.sample)[-c(7,9,15,16)]))){
-    matchInd <- grep(as.character(unique(percentage.table$Country.of.sample))[i],percentage.table$Country.of.sample)
+  matching.names <- as.character(unique(data.table$Country.of.sample)[-c(2,15,17,18,22)])
+  for(i in 1:length(matching.names)){
+    matchInd <- grep(matching.names[i],data.table$Country.of.sample)
     isoVect[matchInd,i]<-rep(1,length(matchInd))
-    totSamp[i] <- sum(as.numeric(isoVect[matchInd,i])*percentage.table$N.samples.with.this.label.in.this.study.[matchInd], na.rm=TRUE)
+    totSamp[i] <- sum(as.numeric(isoVect[matchInd,i])*data.table$N[matchInd], na.rm=TRUE)
   }
-  tblIso <- cbind(percentage.table,isoVect)
-  names(tblIso) <- c(names(percentage.table),isos)
+  tblIso <- cbind(data.table,isoVect)
+  names(tblIso) <- c(names(data.table),isos)
   totState <- rep(0,ncol(tblIso))
-  locations <- as.character(unique(tblIso$Location.of.sample))
-  states <- unlist(unique(regmatches(locations,regexec('[A-Z]{2}',locations)))[-1])
+  locations <- as.character(unique(tblIso$Loc))
+  states <- unique(unlist(regmatches(locations,gregexpr('[A-Z]{2}',locations))))
   stateVect <- matrix(rep("", nrow(tblIso)*length(states)),nrow=nrow(tblIso),ncol=length(states))
   totState <- rep(0,ncol(stateVect))
   for(j in 1:length(states)){
-    matchInd <- grep(states[j],as.character(tblIso$Location.of.sample))
+    matchInd <- grep(states[j],as.character(tblIso$Loc))
     stateVect[matchInd,j]<-rep(1,length(matchInd))
-    totState[j] <- sum(as.numeric(stateVect[matchInd,j])*percentage.table$N.samples.with.this.label.in.this.study.[matchInd],na.rm=TRUE)
+    totState[j] <- sum(as.numeric(stateVect[matchInd,j])*data.table$N[matchInd],na.rm=TRUE)
   }
   tblPlot <- cbind(tblIso, stateVect)
   names(tblPlot) <-c(names(tblIso),states)
   isoTot <- cbind(isos,as.numeric(totSamp))
-  isoTot <- as.data.frame(rbind(isoTot[-c(7,8),],c("GBR",sum(as.numeric(isoTot[c(7,8),2])))))
+  isoTot <- as.data.frame(rbind(isoTot[-c(7,15),],c("GBR",sum(as.numeric(isoTot[c(7,15),2])))))
   stateTot <- as.data.frame(cbind(states,as.numeric(totState)))
   isoTot$V2 <- as.integer(levels(isoTot$V2))[isoTot$V2]
+  isoTot <- isoTot[-3,]
   stateTot$V2 <- as.integer(levels(stateTot$V2))[stateTot$V2]
-  isoTot <- isoTot[-2,]
-  colVect <- pretty(c(stateTot$V2,isoTot$V2))
-  mypal<-brewer.pal(5,"Greens")
+  colVect <- c(0,10,50,200,400,1000,1500)
+  mypal<-brewer.pal(6,"Greens")
   spdf <- joinCountryData2Map(isoTot, joinCode="ISO3", nameJoinColumn="isos")
   US <- readShapePoly(file.path(data.dir,"states_21basic","states.shp"))
   spdf2 <- joinData2Map(stateTot,nameMap=US, nameJoinIDMap="STATE_ABBR",nameJoinColumn="states")
