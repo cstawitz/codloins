@@ -21,7 +21,93 @@ stock.status<-read.csv(file.path(data.dir,"StockStatus.csv"))
 # restaurants<-restaurants[,2:7]
 # resultsMatChi<-resultsMatNY<-resultsMatHou<-resultsMatLA<-matrix(nrow=nsims,ncol=3)
 
+food.words <- c("fil+et","frozen", "steaks", "fried", "steamed", "baked", 
+                "special", "whole", "sushi", "wild", "caught", "cooked", "farmed",
+                "farm-raised", "loin", "salted", "seafood", "gourmet")
 
+foreign.names <- matrix(c("thunfisch|thon|Aton|atum","tuna", "bacalhau|baccalo|kabeljou|cabillaud","cod",
+                   "heller|hamachi", "yellowfin tuna", "Pazifischer","Pacific", "seezunge", "sole", "maguro|toro|akami", "bluefin tuna",
+                   "basa", "pangasius bocourti", "swai", "pangasianodon hypopthalmus"),ncol=2, byrow=T)
+name.col <- percentage.table$Market.name
+true.name <- percentage.table$Actual.stock
+out <- clean_up_labels(name.col, food.words, foreign.names,percentage.table$Actual.stock)
+cleaned.up <- read.csv("DataFixed.csv")
+table.match <- read.csv("FDA_Acceptable_Names.csv")
+cleaned.up$Sci.actuals <- as.character(cleaned.up$Sci.actuals)
+cleaned.up$Sci.labels <- as.character(cleaned.up$Sci.labels)
+cleaned.up$Market.name <- as.character(cleaned.up$Market.name)
+table.match$SCIENTIFIC.NAME <- as.character(table.match$SCIENTIFIC.NAME)
+#Match common names from spreadsheet to FDA accepted common names to get species
+  for(j in 1:nrow(cleaned.up)){
+    if(is.na(cleaned.up$Sci.labels[j])){
+      ind <- grep(cleaned.up$Market.name[j],table.match$COMMON.NAME, ignore.case=TRUE)
+      if(length(ind)==1){
+
+          cleaned.up$Sci.labels[j] <- table.match$SCIENTIFIC.NAME[ind]
+        }
+
+    } else{
+    if(cleaned.up$Sci.labels[j]==""){
+
+      ind <- grep(cleaned.up$Market.name[j],table.match$COMMON.NAME, ignore.case=TRUE)
+      if(length(ind)==1){
+        cleaned.up$Sci.labels[j] <- table.match$SCIENTIFIC.NAME[ind]
+      }
+    }
+    }
+    if(is.na(cleaned.up$Sci.actuals[j])){
+      ind <- grep(cleaned.up$Actual.stock[j],table.match$COMMON.NAME, ignore.case=TRUE)
+      if(length(ind)==1){
+        cleaned.up$Sci.actuals[j] <- table.match$SCIENTIFIC.NAME[ind]
+      }
+    } else{
+    if(cleaned.up$Sci.actuals[j]==""){
+      ind <- grep(cleaned.up$Actual.stock[j],table.match$COMMON.NAME, ignore.case=TRUE)
+      if(length(ind)==1){
+        cleaned.up$Sci.actuals[j] <- table.match$SCIENTIFIC.NAME[ind]
+        }
+    }
+    }
+}
+
+write.csv(cleaned.up,"DataFixed2.csv")
+data.input <- read.csv("DataFixed2.csv")
+data.input$Sci.labels <- as.character(data.input$Sci.labels)
+data.input$Sci.actuals <- as.character(data.input$Sci.actuals)
+data.tbl <- select(data.input, c(Sci.labels,Sci.actuals,Mislabeled,Generally.labeled,Country.of.sample,
+                                 Loc=Location.of.sample..if.in.US., DISTRIBUTOR,SUSHI,GROCERY,
+                                 MARKET,RESTAURANT,PORT,Study,Prop=Prop..Of.samples.with.this.label.that.were.this.Actual.Stock,N.label=N.samples.with.this.label.in.this.study.))
+data.tbl <- mutate(data.tbl,N=N.label*Prop)
+data.tbl <- mutate(data.tbl, N=ifelse(grepl("Helyar",Study),1,N))
+
+data.tbl <- mutate(data.tbl, N=ifelse(grepl("Lamendin",Study),1,N)) %>%
+  mutate(N=ifelse(grepl("Carvalho",Study),1,N)) %>%
+  mutate(N=ifelse(grepl("Galal-Khallaf",Study),1,N)) %>%
+  mutate( N=ifelse(grepl("Ardura",Study),N.label,N)) %>%
+  mutate(N=ifelse(grepl("Nagalakshmi",Study),1,N)) %>%
+  mutate(N=ifelse(grepl("Pappalardo and Felito",Study),1,N))
+
+#Calculate n labels and mislabeling probability
+data.tbl<- get_n_per_label(data.tbl) %>% 
+  get_mislabeling_prob
+data.tbl$Sci.labels <- sub("\\([^\\]*?\\)","",data.tbl$Sci.labels)
+data.tbl$Sci.actuals<- sub("\\([^\\]*?\\)","",data.tbl$Sci.actuals)
+mutate()
+data.tbl$Mislabeled<-get_mislabeled(data.tbl)
+write.csv(data.tbl,"DataFixed2.csv")
+mislabeling <- data.tbl %>%
+  group_by(Sci.labels) %>%
+  mutate(numerator=sum(Mislabeled*N)) %>%
+  mutate(weighted.mean=numerator/sum(N.per.lab)) %>%
+  select(weighted.mean)
+  plot(unique(mislabeling)$weighted.mean)
+col.cod<- ifelse(sort(unique(mislabeling)$weighted.mean)==0,3,1)
+col.cod<- ifelse(sort(unique(mislabeling)$weighted.mean)==1,2,col.cod)
+plot(sort(unique(mislabeling)$weighted.mean),pch=19,cex=.5,axes=NA,col=col.cod)
+axis(2,las=1)
+mtext("Proportion mislabeled",side=2,line=3)
+mtext("Species",side=1,line=2)
+str(mislabeling)
 resultsMat <- matrix(nrow=nsims,ncol=5)
 nsims=100
 nPeople=100
