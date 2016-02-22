@@ -53,7 +53,7 @@ get_n_per_label <- function(data.table){
 }
 
 get_mislabeling_prob <- function(data.table){
-  return(mutate(data.table,Prob=N/N.per.lab))
+  return(mutate(data.table,Prob=N/N.per.lab.y))
 }
 
 

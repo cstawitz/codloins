@@ -69,23 +69,26 @@ table.match$SCIENTIFIC.NAME <- as.character(table.match$SCIENTIFIC.NAME)
     }
     }
 }
-
+require(dplyr)
 write.csv(cleaned.up,"DataFixed2.csv")
-data.input <- read.csv("DataFixed2.csv")
+data.input <- read.csv(file.path(data.dir,"DataFixed3.csv"))
 data.input$Sci.labels <- as.character(data.input$Sci.labels)
 data.input$Sci.actuals <- as.character(data.input$Sci.actuals)
 data.tbl <- select(data.input, c(Sci.labels,Sci.actuals,Mislabeled,Generally.labeled,Country.of.sample,
-                                 Loc=Location.of.sample..if.in.US., DISTRIBUTOR,SUSHI,GROCERY,
-                                 MARKET,RESTAURANT,PORT,Study,Prop=Prop..Of.samples.with.this.label.that.were.this.Actual.Stock,N.label=N.samples.with.this.label.in.this.study.))
-data.tbl <- mutate(data.tbl,N=N.label*Prop)
-data.tbl <- mutate(data.tbl, N=ifelse(grepl("Helyar",Study),1,N))
+                                 Loc, DISTRIBUTOR,SUSHI,GROCERY,
+                                 MARKET,RESTAURANT,PORT,Study,Prop,N.label, N, N.per.lab,Prob)) %>%
+            filter(Study!="") %>%
+            filter(Study!="Cline 2012")
 
-data.tbl <- mutate(data.tbl, N=ifelse(grepl("Lamendin",Study),1,N)) %>%
-  mutate(N=ifelse(grepl("Carvalho",Study),1,N)) %>%
-  mutate(N=ifelse(grepl("Galal-Khallaf",Study),1,N)) %>%
-  mutate( N=ifelse(grepl("Ardura",Study),N.label,N)) %>%
-  mutate(N=ifelse(grepl("Nagalakshmi",Study),1,N)) %>%
-  mutate(N=ifelse(grepl("Pappalardo and Felito",Study),1,N))
+##Only in initial data processing
+#data.tbl <- mutate(data.tbl,N=N.label*Prop)
+#data.tbl <- mutate(data.tbl, N=ifelse(grepl("Helyar",Study),1,N))
+#data.tbl <- mutate(data.tbl, N=ifelse(grepl("Lamendin",Study),1,N)) %>%
+#  mutate(N=ifelse(grepl("Carvalho",Study),1,N)) %>%
+#  mutate(N=ifelse(grepl("Galal-Khallaf",Study),1,N)) %>%
+#  mutate( N=ifelse(grepl("Ardura",Study),N.label,N)) %>%
+#  mutate(N=ifelse(grepl("Nagalakshmi",Study),1,N)) %>%
+#  mutate(N=ifelse(grepl("Pappalardo and Felito",Study),1,N))
 
 #Calculate n labels and mislabeling probability
 data.tbl<- get_n_per_label(data.tbl) %>% 
@@ -94,12 +97,13 @@ data.tbl$Sci.labels <- sub("\\([^\\]*?\\)","",data.tbl$Sci.labels)
 data.tbl$Sci.actuals<- sub("\\([^\\]*?\\)","",data.tbl$Sci.actuals)
 mutate()
 data.tbl$Mislabeled<-get_mislabeled(data.tbl)
-write.csv(data.tbl,"DataFixed2.csv")
+write.csv(data.tbl,"DataFixed4.csv")
 mislabeling <- data.tbl %>%
   group_by(Sci.labels) %>%
   mutate(numerator=sum(Mislabeled*N)) %>%
-  mutate(weighted.mean=numerator/sum(N.per.lab)) %>%
-  select(weighted.mean)
+  mutate(weighted.mean=numerator/sum(N.per.lab.y), tot.N = sum(N.per.lab.y)) %>%
+  select(weighted.mean, tot.N) %>%
+  unique()
   plot(unique(mislabeling)$weighted.mean)
 col.cod<- ifelse(sort(unique(mislabeling)$weighted.mean)==0,3,1)
 col.cod<- ifelse(sort(unique(mislabeling)$weighted.mean)==1,2,col.cod)
@@ -108,6 +112,49 @@ axis(2,las=1)
 mtext("Proportion mislabeled",side=2,line=3)
 mtext("Species",side=1,line=2)
 str(mislabeling)
+write.csv(unique(mislabeling), "MislabeledByLabel.csv")
+power <- mislabeling %>%
+  group_by(tot.N) %>%
+  summarise(count.n=n())
+plot(power$count.n~power$tot.N, log="x")
+
+reduced_set <- mislabeling %>%
+  filter(tot.N>20) %>%
+  bind_cols("Genus"=as.data.frame(unlist(regmatches(reduced_set$Sci.labels,regexec("[[:upper:]][[:lower:]]+",reduced_set$Sci.labels)))))
+names(reduced_set) <- c("Sci.labels", "weighted.mean", "tot.N", "Genus")
+mislabel.by.genus <- reduced_set %>%
+  group_by(Genus) %>%
+  summarise(Genus.prob=sum(tot.N*weighted.mean)/sum(tot.N)) 
+
+write.csv(mislabel.by.genus, "MislabelByGenus.csv")
+mislabel.by.genus$Genus <- reorder(mislabel.by.genus$Genus, mislabel.by.genus$Genus.prob)
+p <- ggplot(mislabel.by.genus,aes(Genus, Genus.prob))
+p + geom_bar(stat="identity") +
+  scale_y_continuous("Prob") +
+ # scale_x_discrete(limits=as.character(mislabel.by.genus[order(mislabel.by.genus$Genus.prob),"Genus"])) +
+  theme(axis.text.x = element_text(angle=45, hjust=1, size=14), axis.text.y = element_text(size=14)) +
+  theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + 
+  theme(panel.background = element_rect(colour="white"))
+
+#Combine rows of mislabeling types with IUCN status
+IUCN <- read.csv(file.path(data.dir,"IUCNStatus.csv"))
+names(data.tbl)
+iucn_labels <- semi_join(data.tbl, IUCN, by=c("Sci.labels"="species"))
+iucn_both <- semi_join(iucn_labels, IUCN, by=c("Sci.actuals"="species"))
+
+iucn_label <- iucn_both %>% 
+  group_by(IUCNstatus.x) %>%
+  summarise(count=sum(N)) 
+
+iucn_actual <- iucn_both %>% 
+  group_by(IUCNstatus.y) %>%
+  summarise(count=sum(N)) %>%
+  left_join(iucn_label,by=c("IUCNstatus.y"="IUCNstatus.x"))
+names(iucn_actual) <- c("IUCNstatus","actual","label")
+
+require(lme4)
+
+
 resultsMat <- matrix(nrow=nsims,ncol=5)
 nsims=100
 nPeople=100
