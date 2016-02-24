@@ -98,6 +98,7 @@ data.tbl$Sci.actuals<- sub("\\([^\\]*?\\)","",data.tbl$Sci.actuals)
 mutate()
 data.tbl$Mislabeled<-get_mislabeled(data.tbl)
 write.csv(data.tbl,"DataFixed4.csv")
+data.tbl <- read.csv(file.path(data.dir,"DataFixed4.csv"))
 mislabeling <- data.tbl %>%
   group_by(Sci.labels) %>%
   mutate(numerator=sum(Mislabeled*N)) %>%
@@ -119,8 +120,17 @@ power <- mislabeling %>%
 plot(power$count.n~power$tot.N, log="x")
 
 reduced_set <- mislabeling %>%
-  filter(tot.N>20) %>%
+  filter(tot.N>20) 
+reduced_set <- reduced_set %>%
   bind_cols("Genus"=as.data.frame(unlist(regmatches(reduced_set$Sci.labels,regexec("[[:upper:]][[:lower:]]+",reduced_set$Sci.labels)))))
+
+data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
+data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
+
+data.tbl <- data.tbl %>%
+  bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
+
+
 names(reduced_set) <- c("Sci.labels", "weighted.mean", "tot.N", "Genus")
 mislabel.by.genus <- reduced_set %>%
   group_by(Genus) %>%
@@ -128,6 +138,7 @@ mislabel.by.genus <- reduced_set %>%
 
 write.csv(mislabel.by.genus, "MislabelByGenus.csv")
 mislabel.by.genus$Genus <- reorder(mislabel.by.genus$Genus, mislabel.by.genus$Genus.prob)
+require(ggplot2)
 p <- ggplot(mislabel.by.genus,aes(Genus, Genus.prob))
 p + geom_bar(stat="identity") +
   scale_y_continuous("Prob") +
@@ -136,6 +147,55 @@ p + geom_bar(stat="identity") +
   theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + 
   theme(panel.background = element_rect(colour="white"))
 
+pdf(file.path(data.dir,"MIslabelByGenus.pdf"), height=10)
+p + geom_bar(stat="identity") +
+  scale_y_continuous("Prob") +
+  scale_x_discrete() +
+  theme(axis.text.x = element_text(angle=45, hjust=1, size=10), axis.text.y = element_text(size=11)) +
+  theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + coord_flip()
+dev.off()
+
+
+Prob.by.country <- data.tbl %>%
+  group_by(Country.of.sample) %>%
+  summarise("Mislabel.prob"=sum(Mislabeled*Prob)/sum(Prob*N), "Mislabel.prob.uncert"=sqrt((sum(Mislabeled*Prob)/sum(Prob*N))*(1-(sum(Mislabeled*Prob)/sum(Prob*N)))/sum(N)))
+str(Prob.by.country)
+
+plot(data=Prob.by.country)
+
+Prob.by.country$Country.of.sample <- reorder(Prob.by.country$Country.of.sample, Prob.by.country$Mislabel.prob)
+ggplot(Prob.by.country, aes(factor(Country.of.sample),Mislabel.prob)) + 
+  geom_point() +
+  geom_segment(aes(y=Mislabel.prob-1.96*Mislabel.prob.uncert, yend=Mislabel.prob+1.96*Mislabel.prob.uncert, x=Country.of.sample, xend=Country.of.sample)) +
+  coord_flip() +
+  scale_y_continuous("Mislabeled proportion") +
+  scale_x_discrete("Country")
+data.tbl <- data.tbl %>%
+  mutate(N=round(N,0))
+
+duplicate_n <- function(data.row){
+  n.samples <- as.numeric(data.row[17])
+  rows.to.add <- data.row
+  if(n.samples!=1){
+    for(i in 2:n.samples){
+      rows.to.add<- rbind(rows.to.add, data.row)
+    }
+  }
+  return(rows.to.add)
+}
+data.duped <- data.tbl[1,]
+for(i in 2:nrow(data.tbl)){
+  data.duped <- bind_rows(data.duped,duplicate_n(data.tbl[i,]))
+}
+names(data.duped)[21] <- "Genus"
+write.csv(data.duped,file.path(data.dir,"Dataduped.csv"))
+
+
+
+glmer(Mislabeled~ (1|Genus)+ Country.of.sample, data=data.tbl, family=binomial(link=logit), weights=N)
+
+glmboost(Mislabeled*Prob ~ Genus + Country.of.sample #+ DISTRIBUTOR + SUSHI + GROCERY + MARKET + RESTAURANT +PORT
+         , data=data.tbl)
 #Combine rows of mislabeling types with IUCN status
 IUCN <- read.csv(file.path(data.dir,"IUCNStatus.csv"))
 names(data.tbl)
@@ -151,8 +211,6 @@ iucn_actual <- iucn_both %>%
   summarise(count=sum(N)) %>%
   left_join(iucn_label,by=c("IUCNstatus.y"="IUCNstatus.x"))
 names(iucn_actual) <- c("IUCNstatus","actual","label")
-
-require(lme4)
 
 
 resultsMat <- matrix(nrow=nsims,ncol=5)
