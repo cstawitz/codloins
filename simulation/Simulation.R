@@ -190,12 +190,24 @@ for(i in 2:nrow(data.tbl)){
 names(data.duped)[21] <- "Genus"
 write.csv(data.duped,file.path(data.dir,"Dataduped.csv"))
 
+#Which are the most common genera?
 
 
-glmer(Mislabeled~ (1|Genus)+ Country.of.sample, data=data.tbl, family=binomial(link=logit), weights=N)
+grouped_Mislabel <- data.tbl %>%
+  filter(Genus %in% c("Salmo", "Oncorhynchus", "Gadus", "Thunnus")) %>%
+  group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT) %>%
+  mutate("Mislabeled.num"=Mislabeled*N) %>%
+  summarise("Wrong"=round(sum(Mislabeled.num),0), "Total"=round(sum(N),0)) %>%
+  ungroup()
 
-glmboost(Mislabeled*Prob ~ Genus + Country.of.sample #+ DISTRIBUTOR + SUSHI + GROCERY + MARKET + RESTAURANT +PORT
-         , data=data.tbl)
+topSp <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ Genus, data=grouped_Mislabel, family=binomial(link=logit))
+print(topSp)
+se <- sqrt(diag(vcov(topSp)))
+(tab <- cbind(Est = fixef(topSp), LL = fixef(topSp) - 1.96 * se, UL = fixef(topSp) + 1.96 *
+                se))
+
+gbm(cbind(Wrong,Total) ~ Genus + Country.of.sample #+ DISTRIBUTOR + SUSHI + GROCERY + MARKET + RESTAURANT +PORT
+         , data=grouped_Mislabel, distribution = )
 #Combine rows of mislabeling types with IUCN status
 IUCN <- read.csv(file.path(data.dir,"IUCNStatus.csv"))
 names(data.tbl)
