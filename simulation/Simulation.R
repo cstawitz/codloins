@@ -129,7 +129,7 @@ data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
 
 data.tbl <- data.tbl %>%
   bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
-
+names(data.tbl)[21] <- "Genus"
 
 names(reduced_set) <- c("Sci.labels", "weighted.mean", "tot.N", "Genus")
 mislabel.by.genus <- reduced_set %>%
@@ -191,23 +191,96 @@ names(data.duped)[21] <- "Genus"
 write.csv(data.duped,file.path(data.dir,"Dataduped.csv"))
 
 #Which are the most common genera?
-
+byGenus <- data.tbl %>% 
+  group_by(Genus) %>%
+  summarise("Tot"=sum(N)) 
+reorder(byGenus$Genus,byGenus$Tot)
 
 grouped_Mislabel <- data.tbl %>%
-  filter(Genus %in% c("Salmo", "Oncorhynchus", "Gadus", "Thunnus")) %>%
-  group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT) %>%
+  filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Gadus")) %>%
+  group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT, Study) %>%
   mutate("Mislabeled.num"=Mislabeled*N) %>%
   summarise("Wrong"=round(sum(Mislabeled.num),0), "Total"=round(sum(N),0)) %>%
-  ungroup()
+  ungroup() %>%
+  mutate(Genus = factor(Genus, levels=c("Salmo", "Oncorhynchus",  "Thunnus", "Gadus"))) 
 
-topSp <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ Genus, data=grouped_Mislabel, family=binomial(link=logit))
-print(topSp)
+grouped_Mislabel$DISTRIBUTOR[is.na(grouped_Mislabel$DISTRIBUTOR)]<-rep(0, sum(is.na(grouped_Mislabel$DISTRIBUTOR)))
+grouped_Mislabel$SUSHI[is.na(grouped_Mislabel$SUSHI)]<-rep(0, sum(is.na(grouped_Mislabel$SUSHI)))
+grouped_Mislabel$GROCERY[is.na(grouped_Mislabel$GROCERY)]<-rep(0, sum(is.na(grouped_Mislabel$GROCERY)))
+grouped_Mislabel$MARKET[is.na(grouped_Mislabel$MARKET)]<-rep(0, sum(is.na(grouped_Mislabel$MARKET)))
+grouped_Mislabel$RESTAURANT[is.na(grouped_Mislabel$RESTAURANT)]<-rep(0, sum(is.na(grouped_Mislabel$RESTAURANT)))
+grouped_Mislabel$PORT[is.na(grouped_Mislabel$PORT)]<-rep(0, sum(is.na(grouped_Mislabel$PORT)))
+
+
+#Check to see if a random effects term is needed for Country.of.sample
+topSp <- quote(gamlss(cbind(Wrong,Total)~ Genus+ Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
+                      + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE)))
+find.hyper(topSp,lower=0.001,upper=25,p=1,pen=2)
+
+#P hyper = .001, so we don't need a RE term
+topSp1 <- gamlss(cbind(Wrong,Total)~ Genus + Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
+                      + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
+topSp2 <- gamlss(cbind(Wrong,Total)~ Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
+                 + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
+topSp3 <- gamlss(cbind(Wrong,Total)~ Genus + DISTRIBUTOR+ SUSHI + GROCERY 
+                 + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
+topSp4 <- gamlss(cbind(Wrong,Total)~ Genus + Country.of.sample, 
+                 data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
+topSp5 <- gamlss(cbind(Wrong,Total)~ Genus, 
+                 data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
+topSp6 <- gamlss(cbind(Wrong,Total)~ DISTRIBUTOR+ SUSHI + GROCERY 
+                 + MARKET + RESTAURANT +PORT, 
+                 data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
+AIC(topSp1,topSp2,topSp3,topSp4, topSp5, topSp6)
+weights <- exp(-.5*AIC(topSp1,topSp2,topSp3,topSp4, topSp5, topSp6)$AIC)
+weights/sum(weights)
+
+fitted <- lpred(topSp5, se.fit=TRUE, type="response")
+plot(fitted$fit[1:4])
+fitted$se.fit[1:4]
+
+#Best model includes genus only if the data set is restricted
+plot(topSp5$residuals~fitted(topSp5))
+abline(h=0)
+
+
+noGenus <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ DISTRIBUTOR+ SUSHI + GROCERY + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=binomial(link=logit))
+noSource <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ Genus , data=grouped_Mislabel, family=binomial(link=logit))
+# Did not converge: remov1 <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ Genus + SUSHI + GROCERY + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=binomial(link=logit))
+#Can compare these since random effects structure is the same
+AIC(topSp, noSource)
+
+
+#Now re-run with REML to compare with Genus random effect
+topSp <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ (1|Genus) + DISTRIBUTOR+ SUSHI + GROCERY + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=binomial(link=logit))
+noGenus <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ DISTRIBUTOR+ SUSHI + GROCERY + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=binomial(link=logit))
+
+plot(topSp)
+
 se <- sqrt(diag(vcov(topSp)))
 (tab <- cbind(Est = fixef(topSp), LL = fixef(topSp) - 1.96 * se, UL = fixef(topSp) + 1.96 *
                 se))
+unLogit <- function(mat){
+  return(exp(mat)/(1-exp(mat)))
+}
+unLogit(tab)
+
+#Calculate overdispersion
+n<- length(resid(topSp))
+sqrt(sum(c(resid(topSp),topSp@u))^2/n)
+#Model appears overdispersed
+
+grouped_Mislabel$obs <- 1:nrow(grouped_Mislabel)
+topSp <- glmer(cbind(Wrong,Total)~(1|obs) +Genus + DISTRIBUTOR+ SUSHI + GROCERY + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=binomial(link=logit))
+
 
 gbm(cbind(Wrong,Total) ~ Genus + Country.of.sample #+ DISTRIBUTOR + SUSHI + GROCERY + MARKET + RESTAURANT +PORT
-         , data=grouped_Mislabel, distribution = )
+         , data=grouped_Mislabel)
+anova(topSp, test="Chisq")
+plot(order(resid(topSp, type="pearson")), col=grouped_Mislabel$Genus)
+
+
+
 #Combine rows of mislabeling types with IUCN status
 IUCN <- read.csv(file.path(data.dir,"IUCNStatus.csv"))
 names(data.tbl)
