@@ -15,7 +15,7 @@ if(grep('Christine',Sys.info()[["user"]])==1){
 #Read in two data sources
 restaurants<-read.csv(file.path(data.dir,"restaurants.csv"))
 percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_LongForm.csv"))
-stock.status<-read.csv(file.path(data.dir,"StockStatus.csv"))
+stock.status<-read.csv(file.path(data.dir,"FishyStatuses.csv"))
 # restaurants<-cbind(1:201,restaurants)
 # #Restrict to our four main stocks
 # restaurants<-restaurants[,2:7]
@@ -98,12 +98,23 @@ data.tbl$Sci.actuals<- sub("\\([^\\]*?\\)","",data.tbl$Sci.actuals)
 mutate()
 data.tbl$Mislabeled<-get_mislabeled(data.tbl)
 write.csv(data.tbl,"DataFixed4.csv")
+
+
+################################################################
+# Start here unless DataFixed4 needs to be remade!!
+#############################################################
 data.tbl <- read.csv(file.path(data.dir,"DataFixed4.csv"))
+data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
+data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
+
+data.tbl <- data.tbl %>%
+  bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
+names(data.tbl)[21] <- "Genus"
 mislabeling <- data.tbl %>%
   group_by(Sci.labels) %>%
   mutate(numerator=sum(Mislabeled*N)) %>%
   mutate(weighted.mean=numerator/sum(N.per.lab.y), tot.N = sum(N.per.lab.y)) %>%
-  select(weighted.mean, tot.N) %>%
+  select(weighted.mean, tot.N, Genus) %>%
   unique()
   plot(unique(mislabeling)$weighted.mean)
 col.cod<- ifelse(sort(unique(mislabeling)$weighted.mean)==0,3,1)
@@ -119,27 +130,26 @@ power <- mislabeling %>%
   summarise(count.n=n())
 plot(power$count.n~power$tot.N, log="x")
 
-reduced_set <- mislabeling %>%
-  filter(tot.N>20) 
-reduced_set <- reduced_set %>%
-  bind_cols("Genus"=as.data.frame(unlist(regmatches(reduced_set$Sci.labels,regexec("[[:upper:]][[:lower:]]+",reduced_set$Sci.labels)))))
+#Aggregate by genus for calculations
+by_genus <- data.tbl %>%
+  group_by(Genus) %>%
+  mutate(numerator=sum(N*Mislabeled)) %>%
+  mutate(weighted.mean=numerator/sum(N.per.lab.y), tot.N = sum(N)) %>%
+  select(weighted.mean, tot.N, Genus) %>%
+  unique()
 
-data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
-data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
-
-data.tbl <- data.tbl %>%
-  bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
-names(data.tbl)[21] <- "Genus"
+#Remove genera which are less than 5% of total
+#Remove anything with less than 10 per genus
+by_genus <- by_genus %>%
+  filter(tot.N>=10)
 
 names(reduced_set) <- c("Sci.labels", "weighted.mean", "tot.N", "Genus")
-mislabel.by.genus <- reduced_set %>%
-  group_by(Genus) %>%
-  summarise(Genus.prob=sum(tot.N*weighted.mean)/sum(tot.N)) 
+mislabel.by.genus <- by_genus
 
 write.csv(mislabel.by.genus, "MislabelByGenus.csv")
-mislabel.by.genus$Genus <- reorder(mislabel.by.genus$Genus, mislabel.by.genus$Genus.prob)
+mislabel.by.genus$Genus <- reorder(mislabel.by.genus$Genus, mislabel.by.genus$weighted.mean)
 require(ggplot2)
-p <- ggplot(mislabel.by.genus,aes(Genus, Genus.prob))
+p <- ggplot(mislabel.by.genus,aes(Genus, weighted.mean))
 p + geom_bar(stat="identity") +
   scale_y_continuous("Prob") +
  # scale_x_discrete(limits=as.character(mislabel.by.genus[order(mislabel.by.genus$Genus.prob),"Genus"])) +
