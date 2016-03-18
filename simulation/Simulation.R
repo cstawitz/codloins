@@ -15,7 +15,7 @@ if(grep('Christine',Sys.info()[["user"]])==1){
 #Read in two data sources
 restaurants<-read.csv(file.path(data.dir,"restaurants.csv"))
 percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_LongForm.csv"))
-stock.status<-read.csv(file.path(data.dir,"FishyStatuses.csv"))
+stock.status<-read.csv(file.path(data.dir,"FishyStatuses.csv"), strip.white=TRUE)
 # restaurants<-cbind(1:201,restaurants)
 # #Restrict to our four main stocks
 # restaurants<-restaurants[,2:7]
@@ -103,10 +103,10 @@ write.csv(data.tbl,"DataFixed4.csv")
 ################################################################
 # Start here unless DataFixed4 needs to be remade!!
 #############################################################
-data.tbl <- read.csv(file.path(data.dir,"DataFixed4.csv"))
+data.tbl <- read.csv(file.path(data.dir,"DataFixed4.csv"), strip.white=TRUE)
 data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
 data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
-
+require(dplyr)
 data.tbl <- data.tbl %>%
   bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
 names(data.tbl)[21] <- "Genus"
@@ -134,10 +134,18 @@ plot(power$count.n~power$tot.N, log="x")
 by_genus <- data.tbl %>%
   group_by(Genus) %>%
   mutate(numerator=sum(N*Mislabeled)) %>%
-  mutate(weighted.mean=numerator/sum(N.per.lab.y), tot.N = sum(N)) %>%
-  select(weighted.mean, tot.N, Genus) %>%
-  unique()
+  mutate("weighted.mean"=numerator/sum(N), "tot.N" = sum(N)) 
 
+sum(data.tbl$N*data.tbl$Mislabeled)
+sum(data.tbl$N)
+
+prop <- data.tbl %>%
+  group_by(Study) %>%
+  summarise("prop"=sum(N*Mislabeled),sum(N))
+
+mean(prop$prop)
+
+1413/6241
 #Remove genera which are less than 5% of total
 #Remove anything with less than 10 per genus
 by_genus <- by_genus %>%
@@ -168,11 +176,13 @@ dev.off()
 
 Prob.by.country <- data.tbl %>%
   group_by(Country.of.sample) %>%
-  summarise("Mislabel.prob"=sum(Mislabeled*Prob)/sum(Prob*N), "Mislabel.prob.uncert"=sqrt((sum(Mislabeled*Prob)/sum(Prob*N))*(1-(sum(Mislabeled*Prob)/sum(Prob*N)))/sum(N)))
+  summarise("Mislabel.prob"=sum(Mislabeled*Prob)/sum(Prob*N), "Mislabel.prob.uncert"=sqrt((sum(Mislabeled*Prob)/sum(Prob*N))*(1-(sum(Mislabeled*Prob)/sum(Prob*N)))/sum(N)), "Tot"=sum(N)) %>%
+  filter(Tot>10)
+
 str(Prob.by.country)
 
 plot(data=Prob.by.country)
-
+require(ggplot2)
 Prob.by.country$Country.of.sample <- reorder(Prob.by.country$Country.of.sample, Prob.by.country$Mislabel.prob)
 ggplot(Prob.by.country, aes(factor(Country.of.sample),Mislabel.prob)) + 
   geom_point() +
@@ -206,13 +216,53 @@ byGenus <- data.tbl %>%
   summarise("Tot"=sum(N)) 
 reorder(byGenus$Genus,byGenus$Tot)
 
+data.tbl$DISTRIBUTOR[is.na(data.tbl$DISTRIBUTOR)]<-rep(0, sum(is.na(data.tbl$DISTRIBUTOR)))
+data.tbl$SUSHI[is.na(data.tbl$SUSHI)]<-rep(0, sum(is.na(data.tbl$SUSHI)))
+data.tbl$GROCERY[is.na(data.tbl$GROCERY)]<-rep(0, sum(is.na(data.tbl$GROCERY)))
+data.tbl$MARKET[is.na(data.tbl$MARKET)]<-rep(0, sum(is.na(data.tbl$MARKET)))
+data.tbl$RESTAURANT[is.na(data.tbl$RESTAURANT)]<-rep(0, sum(is.na(data.tbl$RESTAURANT)))
+data.tbl$PORT[is.na(data.tbl$PORT)]<-rep(0, sum(is.na(data.tbl$PORT)))
+
+
+bySource <- data.tbl %>%
+  group_by(PORT, GROCERY, MARKET, RESTAURANT, SUSHI, DISTRIBUTOR) %>%
+  summarise("prop_source"=sum(Mislabeled*N)/sum(N)) %>%
+  filter(sum(PORT,GROCERY,MARKET,RESTAURANT,SUSHI,DISTRIBUTOR)==1)
+
+
+barplot(sort(bySource$prop_source)[-7], axes=F)
+axis(1, labels=c("Market", "Grocery", "Distributor", "Port", "Restaurant", "Sushi"), at=seq(0.5,6.5,length.out=6))
+axis(2, las=1)
+mtext(side=2, "Mean Mislabeled Proportion", line=3)
+
+p <- ggplot(bySource, aes(PORT, GROCERY, MARKET, RESTAURANT, SUSHI, DISTRIBUTOR, prop_source))
+p + geom_bar(stat="identity") +
+  scale_y_continuous("Prob") +
+  # scale_x_discrete(limits=as.character(mislabel.by.genus[order(mislabel.by.genus$Genus.prob),"Genus"])) +
+  theme(axis.text.x = element_text(angle=45, hjust=1, size=14), axis.text.y = element_text(size=14)) +
+  theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + 
+  theme(panel.background = element_rect(colour="white"))
+
+pdf(file.path(data.dir,"MIslabelByGenus.pdf"), height=10)
+p + geom_bar(stat="identity") +
+  scale_y_continuous("Prob") +
+  scale_x_discrete() +
+  theme(axis.text.x = element_text(angle=45, hjust=1, size=10), axis.text.y = element_text(size=11)) +
+  theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + coord_flip()
+
+
 grouped_Mislabel <- data.tbl %>%
-  filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Gadus")) %>%
+  filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus")) %>%
   group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT, Study) %>%
   mutate("Mislabeled.num"=Mislabeled*N) %>%
   summarise("Wrong"=round(sum(Mislabeled.num),0), "Total"=round(sum(N),0)) %>%
   ungroup() %>%
-  mutate(Genus = factor(Genus, levels=c("Salmo", "Oncorhynchus",  "Thunnus", "Gadus"))) 
+  mutate(Genus = factor(Genus, levels=c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus"))) 
+
+data.tbl %>%
+  group_by(Study,Sci.actuals) %>%
+  summarise("tot.actual"=sum(N))
+
 
 grouped_Mislabel$DISTRIBUTOR[is.na(grouped_Mislabel$DISTRIBUTOR)]<-rep(0, sum(is.na(grouped_Mislabel$DISTRIBUTOR)))
 grouped_Mislabel$SUSHI[is.na(grouped_Mislabel$SUSHI)]<-rep(0, sum(is.na(grouped_Mislabel$SUSHI)))
@@ -221,22 +271,22 @@ grouped_Mislabel$MARKET[is.na(grouped_Mislabel$MARKET)]<-rep(0, sum(is.na(groupe
 grouped_Mislabel$RESTAURANT[is.na(grouped_Mislabel$RESTAURANT)]<-rep(0, sum(is.na(grouped_Mislabel$RESTAURANT)))
 grouped_Mislabel$PORT[is.na(grouped_Mislabel$PORT)]<-rep(0, sum(is.na(grouped_Mislabel$PORT)))
 
-
+require(gamlss)
 #Check to see if a random effects term is needed for Country.of.sample
 topSp <- quote(gamlss(cbind(Wrong,Total)~ Genus+ Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
                       + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE)))
 find.hyper(topSp,lower=0.001,upper=25,p=1,pen=2)
 
 #P hyper = .001, so we don't need a RE term
-topSp1 <- gamlss(cbind(Wrong,Total)~ Genus + Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
+topSp1 <- gamlss(cbind(Wrong,Total-Wrong)~ Genus + Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
                       + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
-topSp2 <- gamlss(cbind(Wrong,Total)~ Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
+topSp2 <- gamlss(cbind(Wrong,Total-Wrong)~ Country.of.sample + DISTRIBUTOR+ SUSHI + GROCERY 
                  + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
-topSp3 <- gamlss(cbind(Wrong,Total)~ Genus + DISTRIBUTOR+ SUSHI + GROCERY 
+topSp3 <- gamlss(cbind(Wrong,Total-Wrong)~ Genus + DISTRIBUTOR+ SUSHI + GROCERY 
                  + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
-topSp4 <- gamlss(cbind(Wrong,Total)~ Genus + Country.of.sample, 
+topSp4 <- gamlss(cbind(Wrong,Total-Wrong)~ Genus + Country.of.sample, 
                  data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
-topSp5 <- gamlss(cbind(Wrong,Total)~ Genus, 
+topSp5 <- gamlss(cbind(Wrong,Total-Wrong)~ Genus, 
                  data=grouped_Mislabel, family=BB, control = gamlss.control(trace=FALSE))
 topSp6 <- gamlss(cbind(Wrong,Total)~ DISTRIBUTOR+ SUSHI + GROCERY 
                  + MARKET + RESTAURANT +PORT, 
@@ -245,13 +295,34 @@ AIC(topSp1,topSp2,topSp3,topSp4, topSp5, topSp6)
 weights <- exp(-.5*AIC(topSp1,topSp2,topSp3,topSp4, topSp5, topSp6)$AIC)
 weights/sum(weights)
 
-fitted <- lpred(topSp5, se.fit=TRUE, type="response")
-plot(fitted$fit[1:4])
-fitted$se.fit[1:4]
+
+fitVals <- lpred(topSp6, se.fit=TRUE, type="response")
+plot(fitVals$fit[c(5, 73,58,1,9,91)], axes=F, pch=19, xlab="Source", ylab="Prob", ylim=c(0,.5))
+axis(1, labels=c("Sushi", "Distributor", "Market", "Grocery", "Restaurant", "Port"), at=1:6)
+axis(2, las=1)
+segments(x0=1:6, x1=1:6, y0=fitVals$fit[c(5, 73,58,1,9,91)]+1.96*fitVals$se.fit[c(5, 73,58,1,9,91)], y1=fitVals$fit[c(5, 73,58,1,9,91)]-1.96*fitVals$se.fit[c(5, 73,58,1,9,91)])
+
+
+plot(fitVals$mu.coefficients, col=grouped_Mislabel$Genus, pch=19, ylim=c(0,0.5), axes=NA)
+axis(1, labels=c("Gadus", "Oncorhynchus", "Salmo", "Thunnus"), at=1:4)
+axis(2, las=1)
+mtext(side=1, "Genus", line=2)
+mtext(side=2, "Fitted mislabel probability", line=3)
+segments(x0=1:4, x1=1:4, y0=fitVals$fit[1:4]+1.96*fitVals$se.fit[1:4], y1=fitVals$fit[1:4]-1.96*fitVals$se.fit[1:4], col=grouped_Mislabel$Genus)
+
+fitVals <- lpred(topSp5, se.fit=TRUE, type="terms")
+plot(fitVals$fit[1:4], col=grouped_Mislabel$Genus, pch=19, ylim=c(-1.5,1), axes=NA)
+axis(1, labels=c("Gadus", "Oncorhynchus", "Salmo", "Thunnus"), at=1:4)
+axis(2, las=1)
+mtext(side=1, "Genus", line=2)
+mtext(side=2, "Fitted mislabel probability", line=3)
+segments(x0=1:4, x1=1:4, y0=fitVals$fit[1:4]+1.96*fitVals$se.fit[1:4], y1=fitVals$fit[1:4]-1.96*fitVals$se.fit[1:4], col=grouped_Mislabel$Genus)
+
+
 
 #Best model includes genus only if the data set is restricted
-plot(topSp5$residuals~fitted(topSp5))
-abline(h=0)
+plot(topSp5$residuals[1:4]~fitted(topSp5)[1:4], col=grouped_Mislabel$Genus)
+
 
 
 noGenus <- glmer(cbind(Wrong,Total)~(1|Country.of.sample)+ DISTRIBUTOR+ SUSHI + GROCERY + MARKET + RESTAURANT +PORT, data=grouped_Mislabel, family=binomial(link=logit))
@@ -292,21 +363,101 @@ plot(order(resid(topSp, type="pearson")), col=grouped_Mislabel$Genus)
 
 
 #Combine rows of mislabeling types with IUCN status
-IUCN <- read.csv(file.path(data.dir,"IUCNStatus.csv"))
-names(data.tbl)
-iucn_labels <- semi_join(data.tbl, IUCN, by=c("Sci.labels"="species"))
-iucn_both <- semi_join(iucn_labels, IUCN, by=c("Sci.actuals"="species"))
+stock.status$species = as.character(stock.status$species)
+stock.status$IUCNstatus = as.character(stock.status$IUCNstatus)
+stock.status <- stock.status[,-1]
+stock.status<- unique(stock.status)
+data.tbl$Status.labels <- data.tbl$Status.actuals <- rep(NA,nrow(data.tbl))
+vect<-NULL
+for(i in 1:nrow(data.tbl)){
+  match.labels <- filter(stock.status, data.tbl$Sci.labels[i]== stock.status$species)
+  match.actuals <- filter(stock.status, data.tbl$Sci.actuals[i]== stock.status$species)
+  if((nrow(match.labels)==1)&&(nrow(match.actuals)==1)){
+    data.tbl$Status.labels[i] <- match.labels$IUCNstatus
+    data.tbl$Status.actuals[i] <- match.actuals$IUCNstatus
+  }
+}
 
-iucn_label <- iucn_both %>% 
-  group_by(IUCNstatus.x) %>%
+missin <- filter(data.tbl, is.na(Status.labels)) %>% unique() 
+missin$Sci.labels
+
+missin2 <- filter(data.tbl, is.na(Status.actuals)) %>% unique() 
+missin2$Sci.actuals
+
+filter(data.tbl, is.na(Status.labels))
+data.tbl$Status.labels
+
+
+IUCNsumm<- data.tbl %>% 
+  group_by(Status.labels, Status.actuals) %>%
   summarise(count=sum(N)) 
 
-iucn_actual <- iucn_both %>% 
-  group_by(IUCNstatus.y) %>%
-  summarise(count=sum(N)) %>%
-  left_join(iucn_label,by=c("IUCNstatus.y"="IUCNstatus.x"))
-names(iucn_actual) <- c("IUCNstatus","actual","label")
+data.tbl %>% 
+  group_by(Genus) %>%
+  summarise(count=count(Status.labels))
 
+IUCNsumm %>% group_by(Status.labels) %>% summarise(sum(count))
+IUCNsumm %>% group_by(Status.actuals) %>% summarise(sum(count))
+
+(data.tbl$Status.labels)
+data.tbl[grep("Thunnus s", data.tbl$Sci.labels),]$Status.labels<- rep(NA,64)
+data.tbl[grep("Thunnus s", data.tbl$Sci.actuals),]$Status.actuals<- rep(NA,length(data.tbl[grep("Thunnus s", data.tbl$Sci.actuals),]$Status.actuals))
+
+#Use placeholder so statuses aren't messed up
+factorize <- data.tbl
+#Ridiculously complicated way to make character statuses into categorical! Remove dd, not evaluated, and NA
+factorize$Status.labels <- as.integer(factor(factorize$Status.labels, 
+                  levels=c("CR", "EN", "VU", "NT", "LC"), 
+                  exclude=c("not evaluated", "DD"), ordered=TRUE))
+
+#Do the same for the actual fish iucn statuses
+factorize$Status.actuals <- as.integer(factor(data.tbl$Status.actuals, 
+                  levels=c("CR", "EN", "VU", "NT", "LC"), 
+                  exclude=c("not evaluated", "DD"), ordered=TRUE))
+
+genera_IUCN <- factorize %>%
+  filter(N>=10) %>%
+  group_by(Genus, Status.labels, Status.actuals, N) %>%
+  summarise("meanLabel"=mean(Status.labels, na.rm=T), "meanActual"=mean(Status.actuals, na.rm=T)) %>%
+  group_by(Genus) %>%
+  summarise("weighted.mean.label"=sum(N*meanLabel, na.rm=T)/sum(N, na.rm=T), "weighted.mean.actual"=sum(N*meanActual, na.rm=T)/sum(N, na.rm=T), "tot"=sum(N))
+
+toplot <- genera_IUCN %>%
+  filter(weighted.mean.label!=0) %>%
+  filter(weighted.mean.actual!=0) %>%
+  mutate("relative"= weighted.mean.actual/weighted.mean.label)
+
+toplot$Genus <- factor(toplot$Genus)
+toplot$Genus <- reorder(toplot$Genus, -toplot$weighted.mean.label)
+
+arrowPlot <- toplot %>%
+  filter(!weighted.mean.label==weighted.mean.actual)
+
+
+require(ggplot2)
+library(scales)
+p <- ggplot(toplot, aes(x=Genus, weighted.mean.label, weighted.mean.actual)) +
+  geom_segment(aes(x=Genus, xend=Genus, y=weighted.mean.label, yend=weighted.mean.actual, size=tot, alpha=abs(relative-1)), arrow=arrow(), colour="gray") +
+  geom_point(data=toplot, aes(x=Genus, y=weighted.mean.label,colour=weighted.mean.label), size=8) +
+  geom_point(aes(x=Genus, y=weighted.mean.actual, colour=weighted.mean.actual), size=8) +
+ scale_y_discrete("IUCN status", breaks=0:5, labels=c("","CR","EN", "VU", "NT", "LC")) +
+  theme_classic() +
+  coord_flip() +
+  theme(axis.text = element_text(size=12), axis.title=element_text(size=14)) +
+  scale_colour_gradient(low="red", high="green", breaks=-1:5, labels=c('',"","CR","EN", "VU", "NT", "LC"), "IUCN status") +
+  scale_size("Sample size")
+p
+
+
+summIUCN <- data.tbl %>% 
+  group_by(Status.labels, Status.actuals, Genus) %>%
+  summarise("IUCNdiffByGenus"=sum(N))
+
+
+data.tbl %>%
+  group_by(Sci.labels) %>%
+  summarise("Prop"=sum(N*Mislabeled)/sum(N), "SampSize"=sum(N)) %>%
+  write.csv(file.path(data.dir,"MislabelByLabel.csv"))
 
 resultsMat <- matrix(nrow=nsims,ncol=5)
 nsims=100
