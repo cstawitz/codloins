@@ -44,7 +44,7 @@ makeSampleMaps <- function(data.table, filename){
   spdf <- joinCountryData2Map(isoTot, joinCode="ISO3", nameJoinColumn="isos")
   US <- readShapePoly(file.path(data.dir,"states_21basic","states.shp"))
   spdf2 <- joinData2Map(stateTot,nameMap=US, nameJoinIDMap="STATE_ABBR",nameJoinColumn="states")
-  mapCountryData(spdf, nameColumnToPlot="V2", catMethod=colVect, colourPalette=mypal, mapTitle="Sample Size By Location")
+  mapCountryData(spdf, nameColumnToPlot="V2", catMethod=colVect, colourPalette=mypal, mapTitle="Sample Size By Location", oceanCol="black")
   mapPolys(spdf2, nameColumnToPlot="V2", catMethod=colVect, add=TRUE, colourPalette=mypal, mapTitle="")
 
   }
