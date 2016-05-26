@@ -401,17 +401,31 @@ p + geom_bar(stat="identity") +
 
 
 grouped_Mislabel <- data.tbl %>%
-  filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus")) %>%
+  #filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus")) %>%
   group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT, Study) %>%
   mutate("Mislabeled.num"=Mislabeled*N) %>%
   summarise("Wrong"=round(sum(Mislabeled.num),0), "Total"=round(sum(N),0)) %>%
   ungroup() %>%
   mutate(Genus = factor(Genus, levels=c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus"))) 
 
+countvals <- function(x) {
+  ux <- unique(x)
+  return(length(ux))
+}
+
+grouped_Mislabel <- grouped_Mislabel %>%
+  group_by(Study) %>%
+  summarise("TotWrong"=sum(Wrong), "Tot"=sum(Total), "NLabel"=countvals(as.character(Genus)))
+
 data.tbl %>%
   group_by(Study,Sci.actuals) %>%
   summarise("tot.actual"=sum(N))
 
+#Run funnel plot
+dat <- escalc(measure="PLO", xi=TotWrong, ni=Tot, data=grouped_Mislabel)
+model.test <- rma(yi, vi, data=dat,   method="REML")
+ranktest(model.test)
+funnel(model.test)
 
 grouped_Mislabel$DISTRIBUTOR[is.na(grouped_Mislabel$DISTRIBUTOR)]<-rep(0, sum(is.na(grouped_Mislabel$DISTRIBUTOR)))
 grouped_Mislabel$SUSHI[is.na(grouped_Mislabel$SUSHI)]<-rep(0, sum(is.na(grouped_Mislabel$SUSHI)))
