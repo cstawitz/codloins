@@ -217,51 +217,54 @@ price.per.genus <- data.tbl %>%
   group_by(Genus) %>%
   summarise('act'=sum(N*price_actual, na.rm=T)/sum(N), "lab"=sum(N*price_label, na.rm=T)/sum(N), 'tot'=sum(N))
 
+price.per.genus <- data.tbl %>%
+  group_by(Genus) %>%
+  summarise('percent'=sum((price_actual/price_label)*N, na.rm=T)/sum(N),'tot'=sum(N))
+
 
 non_zero <- price.per.genus %>%
-  filter(act!=0, lab!=0)
+  filter(percent!=0)
 
-zeros <- as.character(price.per.genus$Genus[(price.per.genus$act==0)|(price.per.genus$lab==0)])
+zeros <- as.character(price.per.genus$Genus[(price.per.genus$percent==0)])
 
 non_zero$Genus <- factor(non_zero$Genus, levels=as.character(non_zero$Genus), exclude=zeros)
 non_zero <- non_zero %>%
-  filter(lab!=act, tot>=10) %>%
+  filter(percent!=1, tot>=10) %>%
   mutate("Diff"=(lab-act)/1000)
 
 #combine groupers
-non_zero[6,]$act <-(2521.757*293+3321.768*37)/(293+37)
-non_zero[6,]$lab <-(3862.792*293+3964.691*37)/(293+37)
-non_zero<- non_zero[-22,]
-non_zero[6,]$tot <- 293+37
-non_zero[25,]$act <-(2095.532*32+1893.088*103)/(32+103)
-non_zero[25,]$lab <-(2635.9640*32+932.1473*103)/(32+103)
-non_zero[25,]$tot <- 32+103
-non_zero<- non_zero[-24,]
+non_zero[7,]$percent <- (non_zero[7,]$percent*non_zero[7,]$tot+non_zero[23,]$percent*non_zero[23,]$tot)/(non_zero[7,]$tot+non_zero[23,]$tot)
+non_zero <- non_zero[-23,]
 
 
-non_zero$Common <- c("White seabass", "Dolphinfish", "Sea bass", "Chilean sea bass", "Anchovy", 
+price.per.genus %>% 
+  filter(percent!=0) %>%
+  summarise(sum(percent*tot)/sum(tot))
+
+
+non_zero$Common <- c("White seabass", "Mud sole","Dolphinfish", "Sea bass", "Chilean sea bass", "Anchovy", 
                      "Grouper", "Cod", "Cusk eel", "Halibut", "Skipjack",
                      "Lates perch", "Lemon sole","Monkfish", "Snapper", "Marlin", "Haddock",
                     "Whiting", "Hake", "Dover sole", "Striped bass", "Smooth hound",
-                    "Pacific salmon", "Seabream", "Flounder", "Atlantic salmon", 
-                    "Sardine", "Mackerel", "Wahoo", "Rockfish", "Amberjack", "Sole",
+                    "Pacific salmon", "Seabream", "Flounder", "Croaker","Plaice","Atlantic salmon", 
+                    "Sardine", "Mackerel", "Wahoo", "Rockfish", "Amberjack", "Sole", "Seabream",
                     "Tuna", "Snoek", "Swordfish")
-non_zero$Common <- reorder(non_zero$Common, non_zero$Diff)
+non_zero$Common <- reorder(non_zero$Common, non_zero$percent)
 require(reshape2)
 non_zero.m <- melt(non_zero)
 require(ggplot2)
 textdf <- data.frame("x"=c(2,-2), "y"=c(10,10), "label"=c("Consumer loses value","Consumer gains value"))
-non_zero$pos<-ifelse(non_zero$Diff<0, "minus","plus")
+non_zero$pos<-ifelse(non_zero$percent<0, "minus","plus")
 
-p <- ggplot(non_zero, aes(Common, Diff, fill=pos)) +
+p <- ggplot(non_zero, aes(Common, (percent-1)*100, fill=log(tot))) +
   geom_bar(stat="identity", position="dodge") +
   coord_flip() +
   theme_classic() +
-  scale_y_continuous("Price difference/kg (USD)") +
+  scale_y_continuous("Price percentage difference") +
   scale_x_discrete("Labeled genus") +
-  scale_fill_brewer(type="div", palette=5) +
-  theme(axis.text=element_text(size=20, colour="white"), axis.title=element_text(size=20, colour="white"), 
-        legend.title=element_text(size=20), legend.text=element_text(size=14), plot.background=element_rect(fill="black"), panel.background=element_rect(fill="black")) 
+  scale_fill_continuous("log(sample size)") +
+  theme(axis.text=element_text(size=20), axis.title=element_text(size=20), 
+        legend.title=element_text(size=20), legend.text=element_text(size=14)) 
 p 
 
 #Only different prices
