@@ -103,10 +103,17 @@ write.csv(data.tbl,"DataFixed4.csv")
 ################################################################
 # Start here unless DataFixed4 needs to be remade!!
 #############################################################
-data.tbl <- read.csv(file.path(data.dir,"DataFixed4.csv"), strip.white=TRUE)
+data.tbl <- read.csv(file.path(data.dir,"DataFixed9.csv"), strip.white=TRUE)
 data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
 data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
 require(dplyr)
+data.tbl<-get_n_per_label(data.tbl)
+data.tbl <- data.tbl[,-c(16,18,20)]
+data.tbl <- get_mislabeling_prob(data.tbl)
+write.csv(data.tbl, file.path(data.dir,"DataFixed9.csv"))
+
+
+
 data.tbl <- data.tbl %>%
   bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
 names(data.tbl)[21] <- "Genus"
@@ -140,8 +147,8 @@ m <- regexec("[1-2][0-9]{2,4}",as.character(data.tbl$Study))
 study_years <- regmatches(as.character(data.tbl$Study), m)
 ##Add in years
 data.tbl$year <- study_years
-data.tbl[data.tbl$Study=="FDA",]$year<-rep(2012,103)
-data.tbl[data.tbl$Study=="FSH340_Lorenz",]$year<-rep(2007,5)
+data.tbl[data.tbl$Study=="FDA",]$year<-rep(2012,104)
+data.tbl[data.tbl$Study=="FSH340_Lorenz",]$year<-rep(2007,39)
 
 
 get_prices <- function(data.tbl, price.tbl){
@@ -165,7 +172,6 @@ for(i in 1:nrow(data.tbl)){
     actual <- paste(actual, "sp")
     data.for.actual <- slice(price.tbl, grep(actual, price.tbl$scientific_name))
   }
-
   #Match up species and year for actual 
   if(nrow(data.for.actual)>0){
   if(!is.na(data.for.actual$Year)){
@@ -182,6 +188,7 @@ for(i in 1:nrow(data.tbl)){
   }
   }
   #Match up species and year for label 
+
   if(nrow(data.for.label)>0){
   if(!is.na(data.for.label$Year)){
   if(year > max(data.for.label$Year)){
@@ -217,9 +224,7 @@ price.per.genus <- data.tbl %>%
   group_by(Genus) %>%
   summarise('act'=sum(N*price_actual, na.rm=T)/sum(N), "lab"=sum(N*price_label, na.rm=T)/sum(N), 'tot'=sum(N))
 
-price.per.genus <- data.tbl %>%
-  group_by(Genus) %>%
-  summarise('percent'=sum((price_actual/price_label)*N, na.rm=T)/sum(N),'tot'=sum(N))
+
 
 
 non_zero <- price.per.genus %>%
@@ -295,6 +300,8 @@ prop <- data.tbl %>%
   group_by(Study) %>%
   summarise("prop"=sum(N*Mislabeled),sum(N))
 
+
+
 mean(prop$prop)
 
 1413/6241
@@ -309,13 +316,13 @@ mislabel.by.genus <- by_genus
 write.csv(mislabel.by.genus, "MislabelByGenus.csv")
 mislabel.by.genus$Genus <- reorder(mislabel.by.genus$Genus, mislabel.by.genus$weighted.mean)
 require(ggplot2)
-p <- ggplot(mislabel.by.genus,aes(Genus, weighted.mean))
+p <- ggplot(mislabel.by.genus,aes(x=Genus, y=weighted.mean))
 p + geom_bar(stat="identity") +
-  scale_y_continuous("Prob") +
+  scale_y_continuous("Prob", limits=c(0,1)) +
  # scale_x_discrete(limits=as.character(mislabel.by.genus[order(mislabel.by.genus$Genus.prob),"Genus"])) +
   theme(axis.text.x = element_text(angle=45, hjust=1, size=14), axis.text.y = element_text(size=14)) +
   theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + 
-  theme(panel.background = element_rect(colour="white"))
+  theme(panel.background = element_rect(colour="white")) + coord_flip()
 
 pdf(file.path(data.dir,"MIslabelByGenus.pdf"), height=10)
 p + geom_bar(stat="identity") +
@@ -528,6 +535,24 @@ plot(order(resid(topSp, type="pearson")), col=grouped_Mislabel$Genus)
 
 
 
+allSp <- unique(c(data.tbl$Sci.labels, data.tbl$Sci.actuals))
+for(i in 1:nrow(stock.status)){
+  stock.status$species[i] <-gsub(" sp","", stock.status$species[i], ignore.case=TRUE)
+}
+
+trim.trailing <- function (x) sub("\\s+$", "", x)
+
+unmatched<-NULL
+for(i in 1:length(allSp)){
+  #allSp[i] <-sub("sp|spp|sp.|spp.","", allSp[i], ignore.case=TRUE)
+  allSp[i] <- trim.trailing(allSp[i])
+  if(!allSp[i] %in% unique(stock.status$species)){
+   unmatched<- c(unmatched,allSp[i])
+  }
+}
+
+write.csv(unmatched, "NoIUCN.csv")
+
 #Combine rows of mislabeling types with IUCN status
 stock.status$species = as.character(stock.status$species)
 stock.status$IUCNstatus = as.character(stock.status$IUCNstatus)
@@ -542,6 +567,10 @@ for(i in 1:nrow(data.tbl)){
     data.tbl$Status.labels[i] <- match.labels$IUCNstatus
     data.tbl$Status.actuals[i] <- match.actuals$IUCNstatus
   }
+}
+for(i in 1:nrow(data.tbl)){
+data.tbl$Sci.labels[i] <- sub("sp|spp|sp.|spp.","",data.tbl$Sci.labels[i])
+data.tbl$Sci.actuals[i] <- sub("sp|spp|sp.|spp.","",data.tbl$Sci.actuals[i])
 }
 
 missin <- filter(data.tbl, is.na(Status.labels)) %>% unique() 
@@ -559,6 +588,37 @@ write.csv(data.tbl, file=file.path(data.dir,"DataPricesStatuses.csv"))
 IUCNsumm<- data.tbl %>% 
   group_by(Status.labels, Status.actuals) %>%
   summarise(count=sum(N)) 
+
+
+get_num_status <- function(colum){
+  if(!is.na(colum)){ num <- switch(colum, 
+         CR = 0, EN = 1, VU = 2, NT = 3, LC = 4,
+         "not evaluated" = NA, DD = NA)
+  } else{
+    num <- NA
+  }
+  return(num)
+}
+
+filter(data.tbl, is.na(Status.labels)) %>% select(Sci.labels) %>% unique()
+filter(data.tbl, is.na(Status.actuals)) %>% select(Sci.actuals) %>% unique()
+
+data.tbl$Label.num <- data.tbl$Actual.num <- rep(NA, nrow(data.tbl))
+for(i in 1:nrow(data.tbl)){
+  data.tbl$Label.num[i]<-get_num_status(data.tbl$Status.labels[i])
+  data.tbl$Actual.num[i]<-get_num_status(data.tbl$Status.actuals[i])
+  print(i)
+}
+
+data.tbl$diff <- rep(NA, nrow(data.tbl))
+for(i in 1:nrow(data.tbl)){
+  if(data.tbl$Sci.labels[i]==data.tbl$Sci.actuals[i]){
+    data.tbl$diff[i] <- 1
+  } else{
+    data.tbl$diff[i] <- data.tbl$Actual.num[i]/data.tbl$Label.num[i]
+  }
+}
+
 
 IUCNsumm$diff<-rep(NA, nrow(IUCNsumm))
 IUCNsumm$diff <- c(0,2,0,0,0,0,0,-1,0,0,
@@ -612,15 +672,15 @@ toplot %>%
 toplot %>%
   summarise(sum(weighted.mean.actual*tot)/sum(tot))
 
-toplot[toplot$Genus=="Epinephelus",]$weighted.mean.label <-(4*15+1.608466*189)/(189+4)
+toplot[toplot$Genus=="Epinephelus",]$weighted.mean.label <-(4*15+2.031746*189)/(189+4)
 toplot[toplot$Genus=="Epinephelus",]$weighted.mean.actual <-(4*15+4.21164*189)/(189+4)
 
 toplot <- toplot %>%
   filter(Genus!="Mycteroperca")
 
 toplot <- cbind(toplot,c("Dolphinfish", "Sea bass", "Anchovy", "Grouper", "Cod", "Channel catfish",
-               "Skipjack", "Lates perch", "Snapper", "Haddock", "Whiting", "Hake",
-               "Blue whiting",  "Swai", "Flounder", "Sardine", "Tuna","Mackerel","Swordfish"))
+               "Skipjack", "Snapper", "Haddock", "Whiting", "Hake",
+               "Blue whiting",  "Swai", "Flounder","Perch" ,"Sardine", "Tuna","Mackerel","Swordfish"))
 names(toplot)[6]<- "Common"
 toplot$Common <- factor(toplot$Common)
 toplot$Common <- reorder(toplot$Common, -toplot$weighted.mean.label)
@@ -635,12 +695,12 @@ p <- ggplot(toplot, aes(x=Common, weighted.mean.label, weighted.mean.actual)) +
   geom_segment(aes(x=Common, xend=Common, y=weighted.mean.label, yend=weighted.mean.actual, size=tot, alpha=abs(relative-1)), arrow=arrow(), colour="gray") +
   geom_point(data=toplot, aes(x=Common, y=weighted.mean.label,colour=weighted.mean.label), size=8) +
   geom_point(aes(x=Common, y=weighted.mean.actual, colour=weighted.mean.actual), size=8) +
- scale_y_discrete("IUCN status", breaks=0:5, labels=c("","CR","EN", "VU", "NT", "LC")) +
+ scale_y_discrete("IUCN status", labels=c("","CR","EN", "VU", "NT", "LC")) +
   scale_x_discrete("Common name")+
   theme_classic() +
   coord_flip() +
   theme(axis.text = element_text(size=14), axis.title=element_text(size=16), legend.text=element_text(size=12)) +
-  scale_colour_gradient(low="red", high="green", breaks=-1:5, labels=c('',"","CR","EN", "VU", "NT", "LC"), "IUCN status") +
+  scale_colour_gradient(low="red", high="green", breaks=-1:5, labels=c('CR',"CR","CR","EN", "VU", "NT", "LC"), "IUCN status") +
   scale_size("Sample size", range=c(.5,2.5)) +
   scale_alpha(expression(paste(Delta, "Ordered:Substituted")), expand=c(.5,.1))
 p
