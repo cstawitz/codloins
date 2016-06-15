@@ -116,7 +116,7 @@ write.csv(data.tbl, file.path(data.dir,"DataFixed9.csv"))
 
 data.tbl <- data.tbl %>%
   bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
-names(data.tbl)[21] <- "Genus"
+names(data.tbl)[20] <- "Genus"
 mislabeling <- data.tbl %>%
   group_by(Sci.labels) %>%
   mutate(numerator=sum(Mislabeled*N)) %>%
@@ -175,9 +175,9 @@ for(i in 1:nrow(data.tbl)){
   #Match up species and year for actual 
   if(nrow(data.for.actual)>0){
   if(!is.na(data.for.actual$Year)){
-  if(year > max(data.for.actual$Year)){
+  if(year > max(data.for.actual$Year, na.rm=TRUE)){
     data.tbl$price_actual[i] <- data.for.actual[which.max(data.for.actual$Year),]$wtexvessel
-  } else if(year < min(data.for.actual$Year)){
+  } else if(year < min(data.for.actual$Year, na.rm=TRUE)){
     data.tbl$price_actual[i] <- data.for.actual[which.min(data.for.actual$Year),]$wtexvessel
   } else if(year %in% data.for.actual$Year){
     data.tbl$price_actual[i] <- filter(data.for.actual, Year==year)$wtexvessel
@@ -191,9 +191,9 @@ for(i in 1:nrow(data.tbl)){
 
   if(nrow(data.for.label)>0){
   if(!is.na(data.for.label$Year)){
-  if(year > max(data.for.label$Year)){
+  if(year > max(data.for.label$Year, na.rm=TRUE)){
     data.tbl$price_label[i] <- data.for.label[which.max(data.for.label$Year),]$wtexvessel
-  } else if(year < min(data.for.label$Year)){
+  } else if(year < min(data.for.label$Year, na.rm=TRUE)){
     data.tbl$price_label[i] <- data.for.label[which.min(data.for.label$Year),]$wtexvessel
   } else if(year %in% data.for.label$Year){
     data.tbl$price_label[i] <- filter(data.for.label, Year==year)$wtexvessel
@@ -568,10 +568,27 @@ for(i in 1:nrow(data.tbl)){
     data.tbl$Status.actuals[i] <- match.actuals$IUCNstatus
   }
 }
+
+
 for(i in 1:nrow(data.tbl)){
+  if(is.na(data.tbl$Status.actuals[i])){
+    match.actuals <- filter(stock.status, sub("sp|spp|sp.|spp.","",data.tbl$Sci.actuals[i])== sub("sp|spp|sp.|spp.","",stock.status$species))
+    if(nrow(match.actuals)==1)
+    {
+      data.tbl$Status.actuals[i] <- match.actuals$IUCNstatus
+    }
+  }
+  if(is.na(data.tbl$Status.labels[i])){
+    match.labels <- filter(stock.status, sub("sp|spp|sp.|spp.","",data.tbl$Sci.labels[i])== sub("sp|spp|sp.|spp.","",stock.status$species))
+    if(nrow(match.labels)==1)
+    {
+      data.tbl$Status.labels[i] <- match.labels$IUCNstatus
+    }
+  }
+}
+
 data.tbl$Sci.labels[i] <- sub("sp|spp|sp.|spp.","",data.tbl$Sci.labels[i])
 data.tbl$Sci.actuals[i] <- sub("sp|spp|sp.|spp.","",data.tbl$Sci.actuals[i])
-}
 
 missin <- filter(data.tbl, is.na(Status.labels)) %>% unique() 
 missin$Sci.labels
