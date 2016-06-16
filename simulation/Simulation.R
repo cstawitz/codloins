@@ -108,7 +108,8 @@ data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
 data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
 require(dplyr)
 data.tbl<-get_n_per_label(data.tbl)
-data.tbl <- data.tbl[,-c(16,18,20)]
+data.tbl <- data.tbl[,-c(19)]
+names(data.tbl)[19]<- "N.per.lab"
 data.tbl <- get_mislabeling_prob(data.tbl)
 write.csv(data.tbl, file.path(data.dir,"DataFixed9.csv"))
 
@@ -572,23 +573,26 @@ for(i in 1:nrow(data.tbl)){
 
 for(i in 1:nrow(data.tbl)){
   if(is.na(data.tbl$Status.actuals[i])){
-    match.actuals <- filter(stock.status, sub("sp|spp|sp.|spp.","",data.tbl$Sci.actuals[i])== sub("sp|spp|sp.|spp.","",stock.status$species))
+    match.actuals <- filter(stock.status, trim.trailing(sub("sp|spp|sp.|spp.","",data.tbl$Sci.actuals[i]))== sub("sp|spp|sp.|spp.","",stock.status$species))
+    match.actuals <- unique(match.actuals)
     if(nrow(match.actuals)==1)
     {
       data.tbl$Status.actuals[i] <- match.actuals$IUCNstatus
     }
   }
   if(is.na(data.tbl$Status.labels[i])){
-    match.labels <- filter(stock.status, sub("sp|spp|sp.|spp.","",data.tbl$Sci.labels[i])== sub("sp|spp|sp.|spp.","",stock.status$species))
+    match.labels <- filter(stock.status, trim.trailing(sub("sp|spp|sp.|spp.","",data.tbl$Sci.labels[i]))== sub("sp|spp|sp.|spp.","",stock.status$species))
+    match.labels <- unique(match.labels)
     if(nrow(match.labels)==1)
     {
       data.tbl$Status.labels[i] <- match.labels$IUCNstatus
+    } else{
+      print(i)
+      print(nrow(match.labels))
     }
   }
 }
 
-data.tbl$Sci.labels[i] <- sub("sp|spp|sp.|spp.","",data.tbl$Sci.labels[i])
-data.tbl$Sci.actuals[i] <- sub("sp|spp|sp.|spp.","",data.tbl$Sci.actuals[i])
 
 missin <- filter(data.tbl, is.na(Status.labels)) %>% unique() 
 missin$Sci.labels
@@ -601,24 +605,77 @@ data.tbl$Status.labels
 
 data.tbl$year <- unlist(data.tbl$year)
 write.csv(data.tbl, file=file.path(data.dir,"DataPricesStatuses.csv"))
+data.tbl <- read.csv(file.path(data.dir,"DataPricesStatuses.csv"))
+
+
+
+overall <- c(get_summary_price(data.tbl), get_mislabeled(data.tbl), get_summary_IUCN(data.tbl))
+
+#Get sensitivity to each study
+studies <-as.character(unique(data.tbl$Study))
+sensitivityStudy<-matrix(data=NA, nrow=length(studies), ncol=4)
+sens <- data.frame(sensitivityStudy)
+names(sens) <- c("Study", "Price", "Mislabel", "IUCN")
+for(i in 1:length(studies)){
+  data.cut <- data.tbl %>%
+    filter(Study!=studies[i])
+  sens$Study[i] <- studies[i]
+  sens$Price[i] <- as.numeric(get_summary_price(data.cut))
+  sens$Mislabel[i]<- as.numeric(get_mislabeled(data.cut))
+  sens$IUCN[i]<- as.numeric(get_summary_IUCN(data.cut))
+}
+str(sens)
+par(oma=c(0,4,0,0))
+plot(sens$Price, rep(1,length(studies)), axes=F, xlab="True price/Label price", ylab="",
+     ylim=c(0,3.2), xlim=c(0,.6), type="l")
+lines(sens$Mislabel,rep(2,length(studies)))
+lines(sens$IUCN,rep(3,length(studies)))
+axis(1)
+axis(2, labels=c("Price", "Mislabel proportion", "IUCN status"), at=c(1,2,3), las=1)
+points(overall,c(1,2,3),col="red", pch=20)
+
+#Get sensitivity to each genus
+genera <-as.character(unique(data.tbl$Genus))
+sensitivityStudy<-matrix(data=NA, nrow=length(genera), ncol=4)
+sens <- data.frame(sensitivityStudy)
+names(sens) <- c("Genus", "Price", "Mislabel", "IUCN")
+for(i in 1:length(genera)){
+  data.cut <- data.tbl %>%
+    filter(as.character(Genus)!=genera[i])
+  sens$Genus[i] <- genera[i]
+  sens$Price[i] <- as.numeric(get_summary_price(data.cut))
+  sens$Mislabel[i]<- as.numeric(get_mislabeled(data.cut))
+  sens$IUCN[i]<- as.numeric(get_summary_IUCN(data.cut))
+}
+
+#Remove each genus one at a time
+str(sens)
+par(oma=c(0,4,0,0))
+plot(sens$Price, rep(1,length(genera)), axes=F, xlab="True price/Label price", ylab="",
+     ylim=c(0,3.2), xlim=c(0,.6), type="l")
+lines(sens$Mislabel,rep(2,length(genera)))
+lines(sens$IUCN,rep(3,length(genera)))
+axis(1)
+axis(2, labels=c("Price", "Mislabel proportion", "IUCN status"), at=c(1,2,3), las=1)
+points(overall,c(1,2,3),col="red", pch=20)
+
+
+
+
+
 
 IUCNsumm<- data.tbl %>% 
   group_by(Status.labels, Status.actuals) %>%
   summarise(count=sum(N)) 
 
 
-get_num_status <- function(colum){
-  if(!is.na(colum)){ num <- switch(colum, 
-         CR = 0, EN = 1, VU = 2, NT = 3, LC = 4,
-         "not evaluated" = NA, DD = NA)
-  } else{
-    num <- NA
-  }
-  return(num)
-}
+
 
 filter(data.tbl, is.na(Status.labels)) %>% select(Sci.labels) %>% unique()
 filter(data.tbl, is.na(Status.actuals)) %>% select(Sci.actuals) %>% unique()
+
+data.tbl$Status.labels <- as.character(data.tbl$Status.labels)
+data.tbl$Status.actuals <- as.character(data.tbl$Status.actuals)
 
 data.tbl$Label.num <- data.tbl$Actual.num <- rep(NA, nrow(data.tbl))
 for(i in 1:nrow(data.tbl)){
