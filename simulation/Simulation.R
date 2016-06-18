@@ -650,18 +650,45 @@ for(i in 1:length(genera)){
 
 #Remove each genus one at a time
 str(sens)
-par(oma=c(0,4,0,0))
-plot(sens$Price, rep(1,length(genera)), axes=F, xlab="True price/Label price", ylab="",
-     ylim=c(0,3.2), xlim=c(0,.6), type="l")
-lines(sens$Mislabel,rep(2,length(genera)))
-lines(sens$IUCN,rep(3,length(genera)))
-axis(1)
-axis(2, labels=c("Price", "Mislabel proportion", "IUCN status"), at=c(1,2,3), las=1)
-points(overall,c(1,2,3),col="red", pch=20)
 
 
+data.tbl <- data.tbl %>% 
+  mutate("Resamp"=N/sum(N))
 
+data.tbl$Pick<- rep(NA,nrow(data.tbl))
+data.tbl$Pick[1]<-data.tbl$Resamp[1]
+for(i in 2:nrow(data.tbl)){
+  data.tbl$Pick[i]<-sum(data.tbl$Resamp[1:i])
+}
 
+n<-1000
+data.resampled <- matrix(NA, nrow=n,ncol=3)
+data.resampled <- data.frame(data.resampled)
+names(data.resampled) <- c("Price", "Mislabel", "IUCN","Diversity")
+#data.resampled$Diversity<-rep(NA,n)
+##Do bootstrap
+system.time(for(i in 1:n){
+  df <- data.tbl
+  for(j in 1:nrow(data.tbl)){
+    ran.unif<-runif(1)
+    row.index<-which(data.tbl$Pick>=ran.unif)[1]
+    df[j,]<-slice(data.tbl,row.index)
+  }
+  #data.resampled$Price[i]<-as.numeric(get_summary_price(df))
+  #data.resampled$Mislabel[i]<- as.numeric(get_mislabeled(df))
+  #data.resampled$IUCN[i]<- as.numeric(get_summary_IUCN(df))
+  data.resampled$Diversity[i]<-as.numeric(get_summary_diversity(df))
+})
+
+quantile(data.resampled$Price,c(.025,.5,.975))
+quantile(data.resampled$Mislabel,c(.025,.5,.975))
+quantile(data.resampled$IUCN,c(.025,.5,.975))
+quantile(data.resampled$Diversity,c(.025,.5,.975))
+par(mfrow=c(1,3), mar=c(1,1,1,0), oma=c(2,3,2,0))
+hist(data.resampled$Price, main="Actual/Label Price")
+mtext("Frequency",2, line=2)
+hist(data.resampled$Mislabel, main="Mislabeled Proportion")
+hist(data.resampled$IUCN, main="IUCN status difference")
 
 
 IUCNsumm<- data.tbl %>% 

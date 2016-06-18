@@ -34,5 +34,33 @@ get_summary_IUCN <- function(data.set){
 }
 
 get_summary_diversity <- function(data.set){
+  library(reshape)
+  library(vegan)
+  dat <- data.set %>%
+    group_by(Sci.labels) %>%
+    summarise(tot=sum(N)) %>%
+    as.data.frame()
+  maus <- cast(dat,~Sci.labels)
+  maus <- maus[,-1]
+  H <- diversity(maus)
   
+  dat <- data.set %>%
+    group_by(Sci.actuals) %>%
+    summarise(tot=sum(N)) %>%
+    as.data.frame()
+  taus <- cast(dat,~Sci.actuals)
+  taus <- taus[,-1]
+  I <- diversity(taus)
+  return(H-I)
+}
+
+plot_summ_stat <- function(summstats){
+  par(oma=c(0,4,0,0))
+  plot(summstats$Price, rep(1,nrow(summstats)), axes=F, xlab="Summary metric", ylab="",
+       ylim=c(0,3.2), xlim=c(0,.6), type="l")
+  lines(summstats$Mislabel,rep(2,nrow(summstats)))
+  lines(summstats$IUCN,rep(3,nrow(summstats)))
+  axis(1)
+  axis(2, labels=c("Price", "Mislabel proportion", "IUCN status"), at=c(1,2,3), las=1)
+  points(overall,c(1,2,3),col="red", pch=20)
 }
