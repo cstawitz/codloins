@@ -223,24 +223,24 @@ label_price <- data.tbl %>%
 #Money lost/gained by SPP
 price.per.genus <- data.tbl %>%
   group_by(Genus) %>%
-  summarise('act'=sum(N*price_actual, na.rm=T)/sum(N), "lab"=sum(N*price_label, na.rm=T)/sum(N), 'tot'=sum(N))
-
-
+  summarise('percent'=sum(N*(price_actual/price_label), na.rm=T)/sum(N), 'tot'=sum(N))
 
 
 non_zero <- price.per.genus %>%
-  filter(percent!=0)
+  filter(percent!=1, percent!=0)
 
-zeros <- as.character(price.per.genus$Genus[(price.per.genus$percent==0)])
+zeros <- as.character(price.per.genus$Genus[(price.per.genus$percent==1)||price.per.genus$percent==0])
 
 non_zero$Genus <- factor(non_zero$Genus, levels=as.character(non_zero$Genus), exclude=zeros)
 non_zero <- non_zero %>%
-  filter(percent!=1, tot>=10) %>%
+  filter(tot>=10) %>%
   mutate("Diff"=(lab-act)/1000)
 
 #combine groupers
-non_zero[7,]$percent <- (non_zero[7,]$percent*non_zero[7,]$tot+non_zero[23,]$percent*non_zero[23,]$tot)/(non_zero[7,]$tot+non_zero[23,]$tot)
-non_zero <- non_zero[-23,]
+non_zero[8,]$percent <- (non_zero[8,]$percent*non_zero[8,]$tot+non_zero[24,]$percent*non_zero[24,]$tot)/(non_zero[8,]$tot+non_zero[24,]$tot)
+non_zero <- non_zero[-24,]
+non_zero[25,]$percent <- (non_zero[25,]$percent*non_zero[25,]$tot+non_zero[36,]$percent*non_zero[36,]$tot)/(non_zero[25,]$tot+non_zero[36,]$tot)
+non_zero <- non_zero[-36,]
 
 
 price.per.genus %>% 
@@ -248,12 +248,13 @@ price.per.genus %>%
   summarise(sum(percent*tot)/sum(tot))
 
 
-non_zero$Common <- c("White seabass", "Mud sole","Dolphinfish", "Sea bass", "Chilean sea bass", "Anchovy", 
+non_zero$Common <- c("Eel","White seabass", "Mud sole","Dolphinfish", "Sea bass", "Chilean sea bass", "Anchovy", 
                      "Grouper", "Cod", "Cusk eel", "Halibut", "Skipjack",
                      "Lates perch", "Lemon sole","Monkfish", "Snapper", "Marlin", "Haddock",
                     "Whiting", "Hake", "Dover sole", "Striped bass", "Smooth hound",
-                    "Pacific salmon", "Seabream", "Flounder", "Croaker","Plaice","Atlantic salmon", 
-                    "Sardine", "Mackerel", "Wahoo", "Rockfish", "Amberjack", "Sole", "Seabream",
+                    "Pacific salmon", "Seabream", "Flounder","Perch", "Croaker","Plaice","Eur. pollock",
+                    "Atlantic salmon", 
+                    "Mackerel", "Wahoo", "Amberjack", "Sole", "Seabream",
                     "Tuna", "Snoek", "Swordfish")
 non_zero$Common <- reorder(non_zero$Common, non_zero$percent)
 require(reshape2)
@@ -266,11 +267,11 @@ p <- ggplot(non_zero, aes(Common, (percent-1)*100, fill=log(tot))) +
   geom_bar(stat="identity", position="dodge") +
   coord_flip() +
   theme_classic() +
-  scale_y_continuous("Price percentage difference") +
+  scale_y_continuous("Actual price percentage of label", labels=c(0,50,100,200)) +
   scale_x_discrete("Labeled genus") +
   scale_fill_continuous("log(sample size)") +
-  theme(axis.text=element_text(size=20), axis.title=element_text(size=20), 
-        legend.title=element_text(size=20), legend.text=element_text(size=14)) 
+  theme(axis.text=element_text(size=6), axis.title=element_text(size=12), 
+        legend.title=element_text(size=8), legend.text=element_text(size=10)) 
 p 
 
 #Only different prices
@@ -316,8 +317,9 @@ mislabel.by.genus <- by_genus
 
 write.csv(mislabel.by.genus, "MislabelByGenus.csv")
 mislabel.by.genus$Genus <- reorder(mislabel.by.genus$Genus, mislabel.by.genus$weighted.mean)
+mislabel.by.genus <- mislabel.by.genus %>% filter(weighted.mean!=0)
 require(ggplot2)
-p <- ggplot(mislabel.by.genus,aes(x=Genus, y=weighted.mean))
+p <- ggplot(mislabel.by.genus,aes(x=Genus, y=weighted.mean, col=fam))
 p + geom_bar(stat="identity") +
   scale_y_continuous("Prob", limits=c(0,1)) +
  # scale_x_discrete(limits=as.character(mislabel.by.genus[order(mislabel.by.genus$Genus.prob),"Genus"])) +
@@ -325,12 +327,26 @@ p + geom_bar(stat="identity") +
   theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + 
   theme(panel.background = element_rect(colour="white")) + coord_flip()
 
+library(taxize)
+mislabel.by.genus$fam <- rep(NA,nrow(mislabel.by.genus))
+for(i in 128:nrow(mislabel.by.genus)){
+  if(as.character(mislabel.by.genus$Genus[i])=="Pangasianodon"){
+    code <- unlist(classification("Pangasius", db='itis', return_id=FALSE))
+  } else{
+    code <- unlist(classification(as.character(mislabel.by.genus$Genus[i]), db='itis', return_id=FALSE))
+  }
+  ind <- which(code=="Family")
+  mislabel.by.genus$fam[i] <- as.character(code[ind/2-1])
+}
+
 pdf(file.path(data.dir,"MIslabelByGenus.pdf"), height=10)
-p + geom_bar(stat="identity") +
-  scale_y_continuous("Prob") +
+p + geom_point() +
+  scale_y_continuous("Mean proportion mislabeled") +
   scale_x_discrete() +
-  theme(axis.text.x = element_text(angle=45, hjust=1, size=10), axis.text.y = element_text(size=11)) +
-  theme(axis.title.x = element_text( size=14), axis.title.y = element_text(size=14)) + coord_flip()
+  scale_colour_hue("Family")+
+  theme(axis.text.x = element_text(angle=45, hjust=1, size=8), axis.text.y = element_text(size=7)) +
+  theme(axis.title.x = element_text( size=12), axis.title.y = element_text(size=14), legend.text=element_text(size=7)) + coord_flip() +
+  theme_classic()
 dev.off()
 
 
@@ -695,7 +711,11 @@ IUCNsumm<- data.tbl %>%
   group_by(Status.labels, Status.actuals) %>%
   summarise(count=sum(N)) 
 
-
+data.tbl %>%
+  group_by(Genus) %>%
+  summarise(amount=sum(N*Mislabeled)/sum(N), samp=sum(N)) %>%
+  filter(samp>=10)%>%
+  write.csv(file.path(data.dir,"MG.csv"))
 
 
 filter(data.tbl, is.na(Status.labels)) %>% select(Sci.labels) %>% unique()
@@ -703,20 +723,21 @@ filter(data.tbl, is.na(Status.actuals)) %>% select(Sci.actuals) %>% unique()
 
 data.tbl$Status.labels <- as.character(data.tbl$Status.labels)
 data.tbl$Status.actuals <- as.character(data.tbl$Status.actuals)
-
+data.tbl$Status.actuals[i]<-"not evaluated"
 data.tbl$Label.num <- data.tbl$Actual.num <- rep(NA, nrow(data.tbl))
 for(i in 1:nrow(data.tbl)){
   data.tbl$Label.num[i]<-get_num_status(data.tbl$Status.labels[i])
   data.tbl$Actual.num[i]<-get_num_status(data.tbl$Status.actuals[i])
   print(i)
 }
-
+data.tbl$Sci.labels <- as.character(data.tbl$Sci.labels)
+data.tbl$Sci.actuals <- as.character(data.tbl$Sci.actuals)
 data.tbl$diff <- rep(NA, nrow(data.tbl))
 for(i in 1:nrow(data.tbl)){
   if(data.tbl$Sci.labels[i]==data.tbl$Sci.actuals[i]){
     data.tbl$diff[i] <- 1
   } else{
-    data.tbl$diff[i] <- data.tbl$Actual.num[i]/data.tbl$Label.num[i]
+    data.tbl$diff[i] <- data.tbl$Actual.num[i]-data.tbl$Label.num[i]
   }
 }
 
@@ -765,7 +786,7 @@ genera_IUCN <- factorize %>%
 toplot <- genera_IUCN %>%
   filter(weighted.mean.label!=0) %>%
   filter(weighted.mean.actual!=0) %>%
-  mutate("relative"= weighted.mean.actual/weighted.mean.label)
+  mutate("relative"= weighted.mean.actual-weighted.mean.label)
 
 toplot %>%
   summarise(sum(weighted.mean.label*tot)/sum(tot))
@@ -779,31 +800,40 @@ toplot[toplot$Genus=="Epinephelus",]$weighted.mean.actual <-(4*15+4.21164*189)/(
 toplot <- toplot %>%
   filter(Genus!="Mycteroperca")
 
-toplot <- cbind(toplot,c("Dolphinfish", "Sea bass", "Anchovy", "Grouper", "Cod", "Channel catfish",
-               "Skipjack", "Snapper", "Haddock", "Whiting", "Hake",
-               "Blue whiting",  "Swai", "Flounder","Perch" ,"Sardine", "Tuna","Mackerel","Swordfish"))
+
+
+toplot <- cbind(toplot,c("Eel","Croaker","Dolphinfish", "Sea bass", "Grouper", "Cod", "Channel catfish",
+               "Skipjack", "Monkfish","Snapper", "Megalodon","Haddock", "Whiting", "Hake",
+               "Smooth hound","Smalleye croaker", "Swai", "Flounder","Perch" ,"Plaice",
+               "Atlantic salmon", "Croaker", "Amberjack","Tuna","Swordfish"))
 names(toplot)[6]<- "Common"
+toplot<-toplot %>%
+  filter(relative!=0)
 toplot$Common <- factor(toplot$Common)
-toplot$Common <- reorder(toplot$Common, -toplot$weighted.mean.label)
+toplot$Common <- reorder(toplot$Common, -toplot$weighted.mean.actual)
 
 arrowPlot <- toplot %>%
-  filter(!weighted.mean.label==weighted.mean.actual)
+  filter(!relative==0)
 
 
 require(ggplot2)
 library(scales)
+library(grid)
 p <- ggplot(toplot, aes(x=Common, weighted.mean.label, weighted.mean.actual)) +
-  geom_segment(aes(x=Common, xend=Common, y=weighted.mean.label, yend=weighted.mean.actual, size=tot, alpha=abs(relative-1)), arrow=arrow(), colour="gray") +
-  geom_point(data=toplot, aes(x=Common, y=weighted.mean.label,colour=weighted.mean.label), size=8) +
-  geom_point(aes(x=Common, y=weighted.mean.actual, colour=weighted.mean.actual), size=8) +
- scale_y_discrete("IUCN status", labels=c("","CR","EN", "VU", "NT", "LC")) +
+  geom_segment(aes(x=Common, xend=Common, y=weighted.mean.label, yend=weighted.mean.actual),
+               arrow=arrow(length=unit(.3,"cm")), colour="gray") +
+  geom_point(data=toplot, aes(x=Common, y=weighted.mean.label,colour=weighted.mean.label), size=5) +
+  geom_point(aes(x=Common, y=weighted.mean.actual, colour=weighted.mean.actual), size=5) +
+ scale_y_discrete("IUCN status", labels=c("Critically endangered",
+                                          "Endangered", "Vulnerable",
+                                          "Near threatened", "Least concern", "")) +
   scale_x_discrete("Common name")+
   theme_classic() +
   coord_flip() +
-  theme(axis.text = element_text(size=14), axis.title=element_text(size=16), legend.text=element_text(size=12)) +
-  scale_colour_gradient(low="red", high="green", breaks=-1:5, labels=c('CR',"CR","CR","EN", "VU", "NT", "LC"), "IUCN status") +
-  scale_size("Sample size", range=c(.5,2.5)) +
-  scale_alpha(expression(paste(Delta, "Ordered:Substituted")), expand=c(.5,.1))
+  theme(axis.text = element_text(size=8), axis.title=element_text(size=8),
+        legend.text=element_text(size=6), axis.text.x=element_text(angle = 45, hjust = 1),
+        legend.title=element_text(size=6)) +
+  scale_colour_gradient(low="red", high="green", breaks=-1:5, labels=c('CR',"CR","CR","EN", "VU", "NT", "LC"), "IUCN status")
 p
 
 
