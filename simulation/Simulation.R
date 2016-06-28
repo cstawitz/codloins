@@ -339,6 +339,8 @@ for(i in 128:nrow(mislabel.by.genus)){
   mislabel.by.genus$fam[i] <- as.character(code[ind/2-1])
 }
 
+write.csv(mislabel.by.genus,file.path(data.dir,"MislabelByGenusFam.csv"))
+
 pdf(file.path(data.dir,"MIslabelByGenus.pdf"), height=10)
 p + geom_point() +
   scale_y_continuous("Mean proportion mislabeled") +
@@ -428,12 +430,13 @@ p + geom_bar(stat="identity") +
 
 
 grouped_Mislabel <- data.tbl %>%
-  #filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus")) %>%
-  group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT, Study) %>%
+  filter(Genus %in% c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus")) %>%
+  group_by(Country.of.sample, Genus, DISTRIBUTOR, SUSHI, GROCERY, MARKET ,RESTAURANT,PORT) %>%
   mutate("Mislabeled.num"=Mislabeled*N) %>%
   summarise("Wrong"=round(sum(Mislabeled.num),0), "Total"=round(sum(N),0)) %>%
   ungroup() %>%
-  mutate(Genus = factor(Genus, levels=c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus"))) 
+  mutate(Genus = factor(Genus, levels=c("Salmo", "Oncorhynchus",  "Thunnus", "Ictalurus", "Gadus"))) %>%
+  mutate(Country.of.sample=as.character(Country.of.sample))
 
 countvals <- function(x) {
   ux <- unique(x)
@@ -485,12 +488,12 @@ AIC(topSp1,topSp2,topSp3,topSp4, topSp5, topSp6)
 weights <- exp(-.5*AIC(topSp1,topSp2,topSp3,topSp4, topSp5, topSp6)$AIC)
 weights/sum(weights)
 
-
+par(cex=.7)
 fitVals <- lpred(topSp6, se.fit=TRUE, type="response")
-plot(fitVals$fit[c(5, 73,58,1,9,91)], axes=F, pch=19, xlab="Source", ylab="Prob", ylim=c(0,.5))
-axis(1, labels=c("Sushi", "Distributor", "Market", "Grocery", "Restaurant", "Port"), at=1:6)
+plot(fitVals$fit[c(64,74,1,8,10, 6)], axes=F, pch=19, xlab="Source", ylab="Estimated mean probability", ylim=c(0,.5))
+axis(1, labels=c("Port","Distributor","Grocery","Market", "Restaurant", "Sushi"), at=1:6)
 axis(2, las=1)
-segments(x0=1:6, x1=1:6, y0=fitVals$fit[c(5, 73,58,1,9,91)]+1.96*fitVals$se.fit[c(5, 73,58,1,9,91)], y1=fitVals$fit[c(5, 73,58,1,9,91)]-1.96*fitVals$se.fit[c(5, 73,58,1,9,91)])
+segments(x0=1:6, x1=1:6, y0=fitVals$fit[c(64,74,1,8,10,6)]+1.96*fitVals$se.fit[c(64,74,1,8,10,6)], y1=fitVals$fit[c(64,74,1,8,10,6)]-1.96*fitVals$se.fit[c(64,74,1,8,10,6)])
 
 
 plot(fitVals$mu.coefficients, col=grouped_Mislabel$Genus, pch=19, ylim=c(0,0.5), axes=NA)
