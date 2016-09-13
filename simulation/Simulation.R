@@ -1,6 +1,6 @@
 if(grep('Christine',Sys.info()[["user"]])==1){
   setwd(paste("C:/Users/",Sys.info()[["user"]],"/Documents/GitHub/codloins/R",sep=""))
-  toload <- list.files()
+  toload <- list.files()[grep("*.R",list.files())]
   for(i in 1:length(toload)){
     source(toload[i])    
   }
@@ -16,6 +16,8 @@ if(grep('Christine',Sys.info()[["user"]])==1){
 restaurants<-read.csv(file.path(data.dir,"restaurants.csv"))
 percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_LongForm.csv"))
 stock.status<-read.csv(file.path(data.dir,"FishyStatuses.csv"), strip.white=TRUE)
+FAO.status <- read.csv(file.path(data.dir, "FAOStockStatus_aggregate.csv"), strip.white=TRUE)
+RAM.status <- read.csv(file.path(data.dir, "RAM_Rearranged.csv"), strip.white = TRUE)
 # restaurants<-cbind(1:201,restaurants)
 # #Restrict to our four main stocks
 # restaurants<-restaurants[,2:7]
@@ -115,8 +117,9 @@ write.csv(data.tbl, file.path(data.dir,"DataFixed9.csv"))
 
 
 
-data.tbl <- data.tbl %>%
-  bind_cols("Genus"=as.data.frame(unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))))
+
+Genus <- unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))
+data.tbl <-cbind(data.tbl, "Genus" =Genus)
 names(data.tbl)[20] <- "Genus"
 mislabeling <- data.tbl %>%
   group_by(Sci.labels) %>%
@@ -143,7 +146,7 @@ power <- mislabeling %>%
 plot(power$count.n~power$tot.N, log="x")
 
 ## Read in price data
-price.tbl <- read.csv(file.path(data.dir,"Rearranged_prices.csv"))
+price.tbl <- read.csv(file.path(data.dir,"Rearranged_prices_Sept2016.csv"))
 m <- regexec("[1-2][0-9]{2,4}",as.character(data.tbl$Study))
 study_years <- regmatches(as.character(data.tbl$Study), m)
 ##Add in years
@@ -152,61 +155,7 @@ data.tbl[data.tbl$Study=="FDA",]$year<-rep(2012,104)
 data.tbl[data.tbl$Study=="FSH340_Lorenz",]$year<-rep(2007,39)
 
 
-get_prices <- function(data.tbl, price.tbl){
-price.tbl$scientific_name <- as.character(price.tbl$scientific_name)
 
-data.tbl$price_label <- data.tbl$price_actual <- rep(NA, nrow(data.tbl))
-#Match prices - USD/metric ton
-for(i in 1:nrow(data.tbl)){
-  actual <- data.tbl$Sci.actuals[i]
-  label <- data.tbl$Sci.labels[i]
-  year <- data.tbl$year[i]
-  data.for.actual <- slice(price.tbl, grep(actual, price.tbl$scientific_name))
-  data.for.label <- slice(price.tbl, grep(label, price.tbl$scientific_name))
-  print(i)
-
-  if(length(unique(data.for.label$scientific_name))>1){
-   label <- paste(label,"sp") 
-   data.for.label <- slice(price.tbl, grep(label, price.tbl$scientific_name))
-  }
-  if(length(unique(data.for.actual$scientific_name))>1){
-    actual <- paste(actual, "sp")
-    data.for.actual <- slice(price.tbl, grep(actual, price.tbl$scientific_name))
-  }
-  #Match up species and year for actual 
-  if(nrow(data.for.actual)>0){
-  if(!is.na(data.for.actual$Year)){
-  if(year > max(data.for.actual$Year, na.rm=TRUE)){
-    data.tbl$price_actual[i] <- data.for.actual[which.max(data.for.actual$Year),]$wtexvessel
-  } else if(year < min(data.for.actual$Year, na.rm=TRUE)){
-    data.tbl$price_actual[i] <- data.for.actual[which.min(data.for.actual$Year),]$wtexvessel
-  } else if(year %in% data.for.actual$Year){
-    data.tbl$price_actual[i] <- filter(data.for.actual, Year==year)$wtexvessel
-  }
-  else {
-    print(paste("No actual match for ", i))
-  }
-  }
-  }
-  #Match up species and year for label 
-
-  if(nrow(data.for.label)>0){
-  if(!is.na(data.for.label$Year)){
-  if(year > max(data.for.label$Year, na.rm=TRUE)){
-    data.tbl$price_label[i] <- data.for.label[which.max(data.for.label$Year),]$wtexvessel
-  } else if(year < min(data.for.label$Year, na.rm=TRUE)){
-    data.tbl$price_label[i] <- data.for.label[which.min(data.for.label$Year),]$wtexvessel
-  } else if(year %in% data.for.label$Year){
-    data.tbl$price_label[i] <- filter(data.for.label, Year==year)$wtexvessel
-  }
-  else {
-    print(paste("No label match for ", i))
-  }
-    }
-  }
-}
-return(data.tbl)
-}
 data.tbl <- get_prices(data.tbl, price.tbl)
 
 
@@ -223,9 +172,8 @@ label_price <- data.tbl %>%
 #Money lost/gained by SPP
 price.per.genus <- data.tbl %>%
   group_by(Genus) %>%
-  summarise('act'=sum(N*price_actual, na.rm=T)/sum(N), "lab"=sum(N*price_label, na.rm=T)/sum(N), 'tot'=sum(N))
-
-
+  summarise('percent'=sum((price_actual/price_label)*N, na.rm=T)/sum(N),'tot'=sum(N)) %>%
+  filter(tot>=10)
 
 
 non_zero <- price.per.genus %>%
@@ -239,8 +187,8 @@ non_zero <- non_zero %>%
   mutate("Diff"=(lab-act)/1000)
 
 #combine groupers
-non_zero[7,]$percent <- (non_zero[7,]$percent*non_zero[7,]$tot+non_zero[23,]$percent*non_zero[23,]$tot)/(non_zero[7,]$tot+non_zero[23,]$tot)
-non_zero <- non_zero[-23,]
+non_zero[8,]$percent <- (non_zero[8,]$percent*non_zero[8,]$tot+non_zero[24,]$percent*non_zero[24,]$tot)/(non_zero[8,]$tot+non_zero[24,]$tot)
+non_zero <- non_zero[-24,]
 
 
 price.per.genus %>% 
@@ -248,12 +196,12 @@ price.per.genus %>%
   summarise(sum(percent*tot)/sum(tot))
 
 
-non_zero$Common <- c("White seabass", "Mud sole","Dolphinfish", "Sea bass", "Chilean sea bass", "Anchovy", 
+non_zero$Common <- c("Eel","White seabass", "Mud sole","Dolphinfish", "Sea bass", "Chilean sea bass", "Anchovy", 
                      "Grouper", "Cod", "Cusk eel", "Halibut", "Skipjack",
                      "Lates perch", "Lemon sole","Monkfish", "Snapper", "Marlin", "Haddock",
                     "Whiting", "Hake", "Dover sole", "Striped bass", "Smooth hound",
-                    "Pacific salmon", "Seabream", "Flounder", "Croaker","Plaice","Atlantic salmon", 
-                    "Sardine", "Mackerel", "Wahoo", "Rockfish", "Amberjack", "Sole", "Seabream",
+                    "Pacific salmon", "Seabream", "Flounder","Perch", "Croaker","Plaice", "Eur. pollock", "Atlantic salmon",
+ "Mackerel", "Wahoo",  "Amberjack", "Sole", "Seabream",
                     "Tuna", "Snoek", "Swordfish")
 non_zero$Common <- reorder(non_zero$Common, non_zero$percent)
 require(reshape2)
@@ -266,12 +214,14 @@ p <- ggplot(non_zero, aes(Common, (percent-1)*100, fill=log(tot))) +
   geom_bar(stat="identity", position="dodge") +
   coord_flip() +
   theme_classic() +
-  scale_y_continuous("Price percentage difference") +
+  scale_y_continuous("Actual price percentage of label", breaks=c(-100,-50,0,100),
+                     labels=c("0","50","100","")) +
   scale_x_discrete("Labeled genus") +
   scale_fill_continuous("log(sample size)") +
   theme(axis.text=element_text(size=20), axis.title=element_text(size=20), 
         legend.title=element_text(size=20), legend.text=element_text(size=14)) 
-p 
+p + theme(axis.line.x=element_line(colour="gray40", size=1),
+          axis.line.y=element_line(colour="gray40", size=1))
 
 #Only different prices
 non_zero <- non_zero %>%
@@ -537,8 +487,46 @@ plot(order(resid(topSp, type="pearson")), col=grouped_Mislabel$Genus)
 
 
 allSp <- unique(c(data.tbl$Sci.labels, data.tbl$Sci.actuals))
-for(i in 1:nrow(stock.status)){
-  stock.status$species[i] <-gsub(" sp","", stock.status$species[i], ignore.case=TRUE)
+strip_spp <- function(data.table){
+  for(i in 1:nrow(data.table)){
+    data.table$species[i] <-sub("sp|spp|sp.|spp.","", data.table$species[i], ignore.case=TRUE)
+  }
+  return(data.table)
+}
+names(FAO.status)[2] <- "species"
+FAO.status$species <- as.character(FAO.status$species)
+fao <- strip_spp(FAO.status)
+fao$species <- trim.trailing((fao$species))
+unique(fao$species)
+fao$State.of.exploitation <- as.character(fao$State.of.exploitation)
+fao$State.of.exploitation[fao$State.of.exploitation=="O"] <- rep(0, length(fao$State.of.exploitation[fao$State.of.exploitation=="O"]))
+fao$State.of.exploitation[fao$State.of.exploitation=="F/O"] <- rep(1, length(fao$State.of.exploitation[fao$State.of.exploitation=="F/O"]))
+fao$State.of.exploitation[fao$State.of.exploitation=="F"] <- rep(2, length(fao$State.of.exploitation[fao$State.of.exploitation=="F"]))
+fao$State.of.exploitation[fao$State.of.exploitation=="F/U"] <- rep(3, length(fao$State.of.exploitation[fao$State.of.exploitation=="F/U"]))
+fao$State.of.exploitation[fao$State.of.exploitation=="U"] <- rep(4, length(fao$State.of.exploitation[fao$State.of.exploitation=="U"]))
+
+fao$State.of.exploitation <- as.integer(fao$State.of.exploitation)
+i<-1
+data.tbl$Fao.label <- data.tbl$Fao.actual <- rep(NA,nrow(data.tbl))
+
+sp <- c(unique(data.tbl$Sci.labels), unique(data.tbl$Sci.actuals))
+sp <- sub(" sp.| spp.| sp| spp","", sp, ignore.case=TRUE)
+sp <- unique(sp)
+
+k<-0
+for(i in 1:length(sp)){
+  if(length(which(fao$species==sp[i]))>0){k<-k+1}
+}
+
+k<-0
+for(i in 1:length(sp)){
+  if(length(which(RAM.status$scientificname==sp[i]))>0){k<-k+1}
+}
+
+for(i in 1:nrow(data.tbl)){
+  lab <- sub("sp|spp|sp.|spp.","", data.tbl$Sci.labels[i], ignore.case=TRUE)
+  act <- sub("sp|spp|sp.|spp.","", data.tbl$Sci.actuals[i], ignore.case=TRUE)
+  ind <- grep(lab,fao$species)
 }
 
 trim.trailing <- function (x) sub("\\s+$", "", x)
