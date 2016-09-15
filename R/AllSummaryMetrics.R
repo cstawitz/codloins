@@ -33,6 +33,12 @@ get_summary_IUCN <- function(data.set){
   return(IUCN.diff$prop)
 }
 
+get_summary_FAO <- function(data.set){
+  FAO.diff <- data.set %>%
+    summarise("prop"=sum(N*(Fao.actual-Fao.label), na.rm=T)/sum(N,na.rm=T))
+  return(FAO.diff$prop)
+}
+
 get_summary_diversity <- function(data.set){
   library(reshape)
   library(vegan)

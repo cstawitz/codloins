@@ -120,7 +120,6 @@ write.csv(data.tbl, file.path(data.dir,"DataFixed9.csv"))
 
 Genus <- unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))
 data.tbl <-cbind(data.tbl, "Genus" =Genus)
-names(data.tbl)[20] <- "Genus"
 mislabeling <- data.tbl %>%
   group_by(Sci.labels) %>%
   mutate(numerator=sum(Mislabeled*N)) %>%
@@ -553,9 +552,9 @@ for(i in 1:nrow(data.tbl)){
   if(length(which(fao$species==act))>0){
     if(any(!is.na(fao$State.of.exploitation[which(fao$species==act)]))){
       if(length(!is.na(fao$State.of.exploitation[which(fao$species==act)]))==1){
-        data.tbl$FAO.actual <- fao$State.of.exploitation[which(fao$species==act)]
+        data.tbl$Fao.actual[i] <- fao$State.of.exploitation[which(fao$species==act)]
       } else{
-        data.tbl$FAO.actual <- mean(fao$State.of.exploitation[which(fao$species==act)])
+        data.tbl$Fao.actual[i] <- mean(fao$State.of.exploitation[which(fao$species==act)], na.rm=T)
       }
     }
   }
@@ -563,20 +562,16 @@ for(i in 1:nrow(data.tbl)){
   if(length(which(fao$species==lab))>0){
     if(any(!is.na(fao$State.of.exploitation[which(fao$species==lab)]))){
       if(length(!is.na(fao$State.of.exploitation[which(fao$species==lab)]))==1){
-        data.tbl$FAO.label <- fao$State.of.exploitation[which(fao$species==lab)]
+        data.tbl$Fao.label[i] <- fao$State.of.exploitation[which(fao$species==lab)]
       } else{
-        data.tbl$FAO.label <- mean(fao$State.of.exploitation[which(fao$species==lab)])
+        data.tbl$Fao.label[i] <- mean(fao$State.of.exploitation[which(fao$species==lab)])
       }
     }
   }
 }
 
-k<-0
-for(i in 1:length(sp)){
-  if(length(which(RAM.status$scientificname==sp[i]))>0){
-    browser()
-  }
-}
+get_summary_FAO(data.tbl)
+
 
 for(i in 1:nrow(data.tbl)){
   lab <- sub("sp|spp|sp.|spp.","", data.tbl$Sci.labels[i], ignore.case=TRUE)
@@ -652,7 +647,7 @@ data.tbl <- read.csv(file.path(data.dir,"DataPricesStatuses.csv"))
 
 
 
-overall <- c(get_summary_price(data.tbl), get_mislabeled(data.tbl), get_summary_IUCN(data.tbl))
+overall <- c(get_summary_price(data.tbl), get_mislabeled(data.tbl), get_summary_IUCN(data.tbl), get_summary_FAO(data.tbl))
 
 #Get sensitivity to each study
 studies <-as.character(unique(data.tbl$Study))
@@ -705,9 +700,9 @@ for(i in 2:nrow(data.tbl)){
 }
 
 n<-1000
-data.resampled <- matrix(NA, nrow=n,ncol=3)
+data.resampled <- matrix(NA, nrow=n,ncol=4)
 data.resampled <- data.frame(data.resampled)
-names(data.resampled) <- c("Price", "Mislabel", "IUCN")
+names(data.resampled) <- c("Price", "Mislabel", "IUCN", "FAO")
 #data.resampled$Diversity<-rep(NA,n)
 ##Do bootstrap
 system.time(for(i in 1:n){
@@ -717,16 +712,18 @@ system.time(for(i in 1:n){
     row.index<-which(data.tbl$Pick>=ran.unif)[1]
     df[j,]<-slice(data.tbl,row.index)
   }
-  data.resampled$Price[i]<-as.numeric(get_summary_price(df))
+  #data.resampled$Price[i]<-as.numeric(get_summary_price(df))
   #data.resampled$Mislabel[i]<- as.numeric(get_mislabeled(df))
   #data.resampled$IUCN[i]<- as.numeric(get_summary_IUCN(df))
   #data.resampled$Diversity[i]<-as.numeric(get_summary_diversity(df))
+  data.resampled$FAO[i] <- as.numeric(get_summary_FAO(df))
 })
 
 quantile(data.resampled$Price,c(.025,.5,.975))
 quantile(data.resampled$Mislabel,c(.025,.5,.975))
 quantile(data.resampled$IUCN,c(.025,.5,.975))
 quantile(data.resampled$Diversity,c(.025,.5,.975))
+quantile(data.resampled$FAO,c(.025,.5,.975))
 par(mfrow=c(1,3), mar=c(1,1,1,0), oma=c(2,3,2,0))
 hist(data.resampled$Price, main="Actual/Label Price")
 mtext("Frequency",2, line=2)
@@ -747,10 +744,12 @@ data.tbl %>%
 
 filter(data.tbl, is.na(Status.labels)) %>% select(Sci.labels) %>% unique()
 filter(data.tbl, is.na(Status.actuals)) %>% select(Sci.actuals) %>% unique()
-
+which(is.na(data.tbl$Status.labels))
 data.tbl$Status.labels <- as.character(data.tbl$Status.labels)
 data.tbl$Status.actuals <- as.character(data.tbl$Status.actuals)
-data.tbl$Status.actuals[i]<-"not evaluated"
+data.tbl$Status.actuals[which(is.na(data.tbl$Status.actuals))]<-"not evaluated"
+data.tbl$Status.actuals[which(data.tbl$Status.actuals=="not evaluted")]<-"not evaluated"
+data.tbl$Status.labels[which(is.na(data.tbl$Status.labels))]<-"not evaluated"
 data.tbl$Label.num <- data.tbl$Actual.num <- rep(NA, nrow(data.tbl))
 for(i in 1:nrow(data.tbl)){
   data.tbl$Label.num[i]<-get_num_status(data.tbl$Status.labels[i])
