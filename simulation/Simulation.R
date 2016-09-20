@@ -17,7 +17,9 @@ restaurants<-read.csv(file.path(data.dir,"restaurants.csv"))
 percentage.table<-read.csv(file.path(data.dir,"MislabelledFishies_LongForm.csv"))
 stock.status<-read.csv(file.path(data.dir,"FishyStatuses.csv"), strip.white=TRUE)
 FAO.status <- read.csv(file.path(data.dir, "FAOStockStatus_aggregate.csv"), strip.white=TRUE)
-RAM.status <- read.csv(file.path(data.dir, "RAM_Rearranged.csv"), strip.white = TRUE)
+RAM.status <- read.csv(file.path(data.dir, "RAM_weighted.csv"), strip.white = TRUE)
+RAM.all <- read.csv(file.path(data.dir, "RAM_ALL_weighted.csv"), strip.white = TRUE)
+
 # restaurants<-cbind(1:201,restaurants)
 # #Restrict to our four main stocks
 # restaurants<-restaurants[,2:7]
@@ -545,10 +547,95 @@ sp <- c(unique(data.tbl$Sci.labels), unique(data.tbl$Sci.actuals))
 sp <- sub(" sp.| spp.| sp| spp","", sp, ignore.case=TRUE)
 sp <- unique(sp)
 
+label.sp <- slice(data.tbl, grep(" sp", data.tbl$Sci.labels))$Sci.labels
+actual.sp <- slice(data.tbl, grep(" sp", data.tbl$Sci.actuals))$Sci.actuals
+genera <- c(label.sp,actual.sp)
+genera <- unique(sub(" sp.| spp.| sp| spp", "", genera))[-2]
+write.csv(genera, file.path(data.dir, "Genera.csv"))
+
+fao.aggregate <- rep(NA, length(genera))
+RAM <- data.frame(genus = rep(NA, nrow(RAM.all)),B=rep(NA, nrow(RAM.all)), U=rep(NA, nrow(RAM.all)), year=rep(NA, nrow(RAM.all)))
+k<-1
+for(i in 1:length(genera)){
+  rows.match <- slice(RAM.all, grep(genera[i],RAM.all$sci.name))
+
+  if(nrow(rows.match)>0){
+    yrs <- unique(rows.match$year)
+    for(j in yrs){
+      yearsAndGenus <- filter(rows.match, year==j)
+      if(nrow(yearsAndGenus)>1){
+      if(!is.na(sum(yearsAndGenus$weight.SSB, na.rm=T))){
+        RAM$B[k] <- sum(yearsAndGenus$B.Bmsy*yearsAndGenus$weight.SSB, na.rm=T)/sum(yearsAndGenus$weight.SSB, na.rm=T)
+        RAM$U[k] <- sum(yearsAndGenus$U.Umsy*yearsAndGenus$weight.SSB, na.rm=T)/sum(yearsAndGenus$weight.SSB, na.rm=T)
+      } else{
+        RAM$B[k] <- sum(yearsAndGenus$B.Bmsy*yearsAndGenus$weight.TB, na.rm=T)/sum(yearsAndGenus$weight.TB)
+        RAM$U[k] <- sum(yearsAndGenus$U.Umsy*yearsAndGenus$weight.TB, na.rm=T)/sum(yearsAndGenus$weight.TB)
+      }
+      } else{
+        RAM$B[k] <- yearsAndGenus$B.Bmsy
+        RAM$U[k] <- yearsAndGenus$U.Umsy
+      }
+      RAM$year[k] <- j
+      RAM$genus[k] <- genera[i]
+      k<-k+1
+    }
+  }
+}
+
+RAM <- RAM[1:k,]
+
+for(i in 1:length(genera)){
+  rows.match <- slice(fao, grep(genera[i],fao$species))
+  fao.aggregate[i] <- mean(rows.match$State.of.exploitation, na.rm=T)
+}
+
+fao$Stock <- addNA(fao$Stock)
+fao$Fishing.territories <- addNA(fao$Fishing.territories)
+fao$X1950.59 <- addNA(fao$X1950.59)              
+fao$X1960s <- addNA(fao$X1960s)
+fao$X1970s<- addNA(fao$X1970s)
+fao$X1980s<- addNA(fao$X1980s)
+fao$X1990s<- addNA(fao$X1990s)
+fao$X2000<- addNA(fao$X2000)
+fao$X2001<- addNA(fao$X2001)
+fao$X2002<- addNA(fao$X2002)
+fao$X2003<- addNA(fao$X2003)
+fao$X2004<- addNA(fao$X2004)
+fao$X2005<- addNA(fao$X2005)
+fao$X2006<- addNA(fao$X2006)
+fao$X2007<- addNA(fao$X2007)
+fao$X2008<- addNA(fao$X2008)
+fao$X2009 <- addNA(fao$X2009)
+fao$Uncertainty <- addNA(fao$Uncertainty)
+
+RAM.status$stock <- addNA(RAM.status$stock)
+RAM.genus <- data.frame(X=NA, stock=NA, sci.name=RAM$genus,year=RAM$year, B.Bmsy=RAM$B, U.Umsy=RAM$U, weight.SSB=NA, weight.TB=NA)
+
+RAM.together <- rbind(RAM.status,RAM.genus)
+
+
+
+fao.genus <- data.frame(Stock=NA, species=genera, Fishing.territories=NA, X1950.59=NA, X1960s=NA, X1970s=NA, X1980s=NA, X1990s=NA, X2000=NA, X2001=NA, X2002=NA, X2003=NA, X2004=NA, X2005=NA, X2006=NA, X2007=NA, X2008=NA, X2009=NA, State.of.exploitation=fao.aggregate, Uncertainty=NA)
+
+
+fao <- rbind(fao, fao.genus)
+
+
+
 k<-0
 for(i in 1:nrow(data.tbl)){
-  lab <- data.tbl$Sci.labels[i]
-  act <- data.tbl$Sci.actuals[i]
+  if(i==2023){browser()}
+  if(data.tbl$Sci.labels[i]=="Argyrops spinifer"){
+    lab <- data.tbl$Sci.labels[i]
+  } else{
+    lab <- sub(" sp| spp| sp.| spp.", "", data.tbl$Sci.labels[i])
+  }
+  if(data.tbl$Sci.actuals[i]=="Argyrops spinifer"){
+    act <- data.tbl$Sci.actuals[i]
+  } else{
+    act <- sub(" sp| spp| sp.| spp.", "", data.tbl$Sci.actuals[i])
+  }
+
   if(length(which(fao$species==act))>0){
     if(any(!is.na(fao$State.of.exploitation[which(fao$species==act)]))){
       if(length(!is.na(fao$State.of.exploitation[which(fao$species==act)]))==1){
