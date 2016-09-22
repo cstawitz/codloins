@@ -10,11 +10,148 @@ get_summary_price <-function(data.set){
   return(price_summary$percent)
 }
 
+get_summary_RAM_qual <-function(data.set){
+  RAM.qual <- data.set %>%
+    mutate("OF.lab"=ifelse(RAM.U.lab>1, 1,2), "B.lab"=ifelse(RAM.B.lab>1, 1,2),
+           "OF.act"=ifelse(RAM.U.act>1, 1,2), "B.act"=ifelse(RAM.B.act>1, 1,2)) %>%
+    summarise('percentU'=sum((OF.act-OF.lab)*N, na.rm=T)/sum(N),
+              'percentB'=sum((B.act-B.lab)*N, na.rm=T)/sum(N), 'tot'=sum(N)) %>%
+    filter(tot>=10)
+  
+  return(RAM.qual)
+}
+
+get_summary_RAM_quant <- function(data.set){
+  RAM.summ<- data.set %>%
+    summarise('percentU'=sum((RAM.U.act/RAM.U.lab)*N, na.rm=T)/sum(N),
+              'percentB'=sum((RAM.B.act/RAM.B.lab)*N, na.rm=T)/sum(N), 'tot'=sum(N)) %>%
+    filter(tot>=10)
+  return(RAM.summ)
+}
+
 get_mislabeled <- function(data.set){
   by_genus <- data.set %>%
     summarise("weighted.mean"=(sum(N*Mislabeled))/sum(N), "tot.N" = sum(N))  %>%
     filter("tot.N">=10)
   return(by_genus$weighted.mean)
+}
+
+match_RAM <- function(RAMdb, data.set){
+  for(i in 1:nrow(data.set)){
+    if(data.set$Sci.labels[i]=="Argyrops spinifer"){
+      lab <- data.set$Sci.labels[i]
+    } else{
+      lab <- sub(" sp| spp| sp.| spp.", "", data.set$Sci.labels[i])
+    }
+
+    if(data.set$Sci.actuals[i]=="Argyrops spinifer"){
+      act <- data.set$Sci.actuals[i]
+    } else{
+      act <-sub(" sp| spp| sp.| spp.", "", data.set$Sci.actuals[i])
+    }
+    yr <- data.set$year[i]
+    match.lab <- filter(RAMdb, (sci.name==lab)) 
+    if(nrow(match.lab)>0){
+      if(any(match.lab$year==yr)){
+        match.lab.yr <- filter(match.lab, year==yr)
+        } else{
+          if(all(match.lab$year<yr)){
+            upper <- max(match.lab$year)
+            match.lab.yr <- filter(match.lab, year==upper)
+          } 
+        }
+          
+        if(nrow(match.lab.yr)==1){
+          data.set$RAM.B.lab[i] <- match.lab.yr$B.Bmsy
+          data.set$RAM.U.lab[i] <- match.lab.yr$U.Umsy
+        } else{
+          noNAB <- filter(match.lab.yr, !is.na(B.Bmsy))
+          noNAU <- filter(match.lab.yr, !is.na(U.Umsy))
+          if(sum(!is.na(noNAB$weight.SSB))>1){
+            numNA <- sum(is.na(noNAB$weight.SSB))
+            noNAB$weight.SSB[is.na(noNAB$weight.SSB)] <- rep(1/numNA, numNA)
+            data.set$RAM.B.lab[i] <- sum(noNAB$B.Bmsy*noNAB$weight.SSB)/sum(noNAB$weight.SSB)
+          } else{
+            if(any(!is.na(noNAB$weight.TB))){
+              numNA <- sum(is.na(noNAB$weight.TB))
+              noNAB$weight.TB[is.na(noNAB$weight.TB)] <- rep(1/numNA, numNA)
+            data.set$RAM.B.lab[i] <- sum(noNAB$B.Bmsy*noNAB$weight.TB)/sum(noNAB$weight.TB)
+            } else{
+              data.set$RAM.B.lab[i] <- mean(noNAB$B.Bmsy)
+            }
+          }
+          if(sum(!is.na(noNAU$weight.SSB))>1){
+            numNA <- sum(is.na(noNAU$weight.SSB))
+            noNAU$weight.SSB[is.na(noNAU$weight.SSB)] <- rep(1/numNA, numNA)
+            data.set$RAM.U.lab[i] <- sum(noNAU$U.Umsy*noNAU$weight.SSB)/sum(noNAU$weight.SSB)
+          } else{
+            if(any(!is.na(noNAU$weight.TB))){
+              numNA <- sum(is.na(noNAU$weight.TB))
+              noNAU$weight.TB[is.na(noNAU$weight.TB)] <- rep(1/numNA, numNA)
+              data.set$RAM.U.lab[i] <- sum(noNAU$U.Umsy*noNAU$weight.TB)/sum(noNAU$weight.TB)
+            } else{
+              data.set$RAM.U.lab[i] <- mean(noNAU$U.Umsy[!is.na(noNAU$U.Umsy)])
+            }
+          }
+        }
+      } 
+    else{
+      data.set$RAM.B.lab[i] <- NA
+      data.set$RAM.U.lab[i] <- NA
+    }
+    
+    match.act <- filter(RAMdb, (sci.name==act)) 
+    if(nrow(match.act)>0){
+      if(any(match.act$year==yr)){
+        match.act.yr <- filter(match.act, year==yr)
+      } else{
+        if(all(match.act$year<yr)){
+          upper <- max(match.act$year)
+          match.act.yr <- filter(match.act, year==upper)
+        } 
+      }
+      
+      if(nrow(match.act.yr)==1){
+        data.set$RAM.B.act[i] <- match.act.yr$B.Bmsy
+        data.set$RAM.U.act[i] <- match.act.yr$U.Umsy
+      } else{
+        noNAB <- filter(match.act.yr, !is.na(B.Bmsy))
+        noNAU <- filter(match.act.yr, !is.na(U.Umsy))
+        if(sum(!is.na(noNAB$weight.SSB))>1){
+          numNA <- sum(is.na(noNAB$weight.SSB))
+          noNAB$weight.SSB[is.na(noNAB$weight.SSB)] <- rep(1/numNA, numNA)
+          data.set$RAM.B.act[i] <- sum(noNAB$B.Bmsy*noNAB$weight.SSB)/sum(noNAB$weight.SSB)
+        } else{
+          if(any(!is.na(noNAB$weight.TB))){
+            numNA <- sum(is.na(noNAB$weight.TB))
+            noNAB$weight.TB[is.na(noNAB$weight.TB)] <- rep(1/numNA, numNA)
+            data.set$RAM.B.act[i] <- sum(noNAB$B.Bmsy*noNAB$weight.TB)/sum(noNAB$weight.TB)
+          } else{
+            data.set$RAM.B.act[i] <- mean(noNAB$B.Bmsy)
+          }
+        }
+        if(sum(!is.na(noNAU$weight.SSB))>1){
+          numNA <- sum(is.na(noNAU$weight.SSB))
+          noNAU$weight.SSB[is.na(noNAU$weight.SSB)] <- rep(1/numNA, numNA)
+          data.set$RAM.U.act[i] <- sum(noNAU$U.Umsy*noNAU$weight.SSB)/sum(noNAU$weight.SSB)
+        } else{
+          if(any(!is.na(noNAU$weight.TB))){
+            numNA <- sum(is.na(noNAU$weight.TB))
+            noNAU$weight.TB[is.na(noNAU$weight.TB)] <- rep(1/numNA, numNA)
+            data.set$RAM.U.act[i] <- sum(noNAU$U.Umsy*noNAU$weight.TB)/sum(noNAU$weight.TB)
+          } else{
+            data.set$RAM.U.act[i] <- mean(noNAU$U.Umsy[!is.na(noNAU$U.Umsy)])
+          }
+        }
+      }
+    } 
+    else{
+      data.set$RAM.B.act[i] <- NA
+      data.set$RAM.U.act[i] <- NA
+    }
+  }
+  
+  return(data.set)
 }
 
 get_num_status <- function(colum){

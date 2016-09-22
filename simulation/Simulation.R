@@ -155,7 +155,7 @@ data.tbl$year <- study_years
 data.tbl[data.tbl$Study=="FDA",]$year<-rep(2012,104)
 data.tbl[data.tbl$Study=="FSH340_Lorenz",]$year<-rep(2007,39)
 
-
+data.tbl$year <- unlist(data.tbl$year)
 
 data.tbl <- get_prices(data.tbl, price.tbl)
 
@@ -554,6 +554,7 @@ genera <- unique(sub(" sp.| spp.| sp| spp", "", genera))[-2]
 write.csv(genera, file.path(data.dir, "Genera.csv"))
 
 fao.aggregate <- rep(NA, length(genera))
+
 RAM <- data.frame(genus = rep(NA, nrow(RAM.all)),B=rep(NA, nrow(RAM.all)), U=rep(NA, nrow(RAM.all)), year=rep(NA, nrow(RAM.all)))
 k<-1
 for(i in 1:length(genera)){
@@ -564,13 +565,39 @@ for(i in 1:length(genera)){
     for(j in yrs){
       yearsAndGenus <- filter(rows.match, year==j)
       if(nrow(yearsAndGenus)>1){
-      if(!is.na(sum(yearsAndGenus$weight.SSB, na.rm=T))){
-        RAM$B[k] <- sum(yearsAndGenus$B.Bmsy*yearsAndGenus$weight.SSB, na.rm=T)/sum(yearsAndGenus$weight.SSB, na.rm=T)
-        RAM$U[k] <- sum(yearsAndGenus$U.Umsy*yearsAndGenus$weight.SSB, na.rm=T)/sum(yearsAndGenus$weight.SSB, na.rm=T)
-      } else{
-        RAM$B[k] <- sum(yearsAndGenus$B.Bmsy*yearsAndGenus$weight.TB, na.rm=T)/sum(yearsAndGenus$weight.TB)
-        RAM$U[k] <- sum(yearsAndGenus$U.Umsy*yearsAndGenus$weight.TB, na.rm=T)/sum(yearsAndGenus$weight.TB)
-      }
+        yearsGenusNoNA<- filter(yearsAndGenus, !is.na(B.Bmsy))
+        if(any(!is.na(yearsGenusNoNA$weight.SSB))){
+          numNA <- sum(is.na(yearsGenusNoNA$weight.SSB))
+          yearsGenusNoNA$weight.SSB[is.na(yearsGenusNoNA$weight.SSB)]<- rep(1/numNA,numNA)
+          RAM$B[k] <- sum(yearsGenusNoNA$B.Bmsy*yearsGenusNoNA$weight.SSB)/sum(yearsGenusNoNA$weight.SSB)
+
+        } else{
+          if(any(!is.na(yearsGenusNoNA$weight.TB))){ #use total biomass if possible
+            numNA <- sum(is.na(yearsGenusNoNA$weight.TB))
+           yearsGenusNoNA$weight.TB[is.na(yearsGenusNoNA$weight.TB)]<- rep(1/numNA,numNA)
+            RAM$B[k] <- sum(yearsGenusNoNA$B.Bmsy*yearsGenusNoNA$weight.TB)/sum(yearsGenusNoNA$weight.TB)
+
+          } else{
+            RAM$B[k] <- mean(yearsGenusNoNA$B.Bmsy)
+          }
+        }
+        
+        yearsGenusNoNA<- filter(yearsAndGenus, !is.na(U.Umsy))
+        if(any(!is.na(yearsGenusNoNA$weight.SSB))){
+          numNA <- sum(is.na(yearsGenusNoNA$weight.SSB))
+          yearsGenusNoNA$weight.SSB[is.na(yearsGenusNoNA$weight.SSB)]<- rep(1/numNA,numNA)
+          RAM$U[k] <- sum(yearsGenusNoNA$U.Umsy*yearsGenusNoNA$weight.SSB)/sum(yearsGenusNoNA$weight.SSB)
+          
+        } else{
+          if(any(!is.na(yearsGenusNoNA$weight.TB))){ #use total biomass if possible
+            numNA <- sum(is.na(yearsGenusNoNA$weight.TB))
+            yearsGenusNoNA$weight.TB[is.na(yearsGenusNoNA$weight.TB)]<- rep(1/numNA,numNA)
+            RAM$U[k] <- sum(yearsGenusNoNA$U.Umsy*yearsGenusNoNA$weight.TB)/sum(yearsGenusNoNA$weight.TB)
+            
+          } else{
+            RAM$B[k] <- mean(yearsGenusNoNA$B.Bmsy)
+          }
+        }
       } else{
         RAM$B[k] <- yearsAndGenus$B.Bmsy
         RAM$U[k] <- yearsAndGenus$U.Umsy
@@ -613,13 +640,24 @@ RAM.genus <- data.frame(X=NA, stock=NA, sci.name=RAM$genus,year=RAM$year, B.Bmsy
 
 RAM.together <- rbind(RAM.status,RAM.genus)
 
+stats <- data.tbl %>%
+transmute("u.rat"=RAM.U.act/RAM.U.lab, "b.rat"=RAM.B.act/RAM.B.lab)
 
+plot(u.rat~b.rat,data=stats)
+
+sum(data.tbl$RAM.U.act>1, na.rm=T)
+sum(data.tbl$RAM.U.lab>1, na.rm=T)
+sum(data.tbl$RAM.B.act>1, na.rm=T)
+sum(data.tbl$RAM.B.lab>1, na.rm=T)
+
+
+data.tbl$RAM.B.lab <- data.tbl$RAM.U.lab <- data.tbl$RAM.B.act <- data.tbl$RAM.U.act <- rep(NA, nrow(data.tbl))
+data.tbl <- match_RAM(RAM.together, data.tbl)
 
 fao.genus <- data.frame(Stock=NA, species=genera, Fishing.territories=NA, X1950.59=NA, X1960s=NA, X1970s=NA, X1980s=NA, X1990s=NA, X2000=NA, X2001=NA, X2002=NA, X2003=NA, X2004=NA, X2005=NA, X2006=NA, X2007=NA, X2008=NA, X2009=NA, State.of.exploitation=fao.aggregate, Uncertainty=NA)
 
 
 fao <- rbind(fao, fao.genus)
-
 
 
 k<-0
@@ -787,9 +825,9 @@ for(i in 2:nrow(data.tbl)){
 }
 
 n<-1000
-data.resampled <- matrix(NA, nrow=n,ncol=4)
+data.resampled <- matrix(NA, nrow=n,ncol=8)
 data.resampled <- data.frame(data.resampled)
-names(data.resampled) <- c("Price", "Mislabel", "IUCN", "FAO")
+names(data.resampled) <- c("Price", "Mislabel", "IUCN", "FAO", "RAM.U.qual", "RAM.B.qual", "RAM.U.quant", "RAM.B.quant")
 #data.resampled$Diversity<-rep(NA,n)
 ##Do bootstrap
 system.time(for(i in 1:n){
@@ -799,11 +837,15 @@ system.time(for(i in 1:n){
     row.index<-which(data.tbl$Pick>=ran.unif)[1]
     df[j,]<-slice(data.tbl,row.index)
   }
-  #data.resampled$Price[i]<-as.numeric(get_summary_price(df))
+  data.resampled$Price[i]<-as.numeric(get_summary_price(df))
   #data.resampled$Mislabel[i]<- as.numeric(get_mislabeled(df))
   #data.resampled$IUCN[i]<- as.numeric(get_summary_IUCN(df))
   #data.resampled$Diversity[i]<-as.numeric(get_summary_diversity(df))
   data.resampled$FAO[i] <- as.numeric(get_summary_FAO(df))
+  data.resampled$RAM.U.qual[i] <- as.numeric(get_summary_RAM_qual(df)$percentU)
+  data.resampled$RAM.B.qual[i] <- as.numeric(get_summary_RAM_qual(df)$percentB)
+  data.resampled$RAM.U.quant[i] <- as.numeric(get_summary_RAM_quant(df)$percentU)
+  data.resampled$RAM.B.quant[i] <- as.numeric(get_summary_RAM_quant(df)$percentB)
 })
 
 quantile(data.resampled$Price,c(.025,.5,.975))
@@ -811,6 +853,10 @@ quantile(data.resampled$Mislabel,c(.025,.5,.975))
 quantile(data.resampled$IUCN,c(.025,.5,.975))
 quantile(data.resampled$Diversity,c(.025,.5,.975))
 quantile(data.resampled$FAO,c(.025,.5,.975))
+quantile(data.resampled$RAM.U.qual,c(.025,.5,.975))
+quantile(data.resampled$RAM.B.qual,c(.025,.5,.975))
+quantile(data.resampled$RAM.U.quant,c(.025,.5,.975))
+quantile(data.resampled$RAM.B.quant,c(.025,.5,.975))
 par(mfrow=c(1,3), mar=c(1,1,1,0), oma=c(2,3,2,0))
 hist(data.resampled$Price, main="Actual/Label Price")
 mtext("Frequency",2, line=2)
@@ -895,6 +941,66 @@ genera_IUCN <- factorize %>%
   summarise("weighted.mean.label"=sum(N*meanLabel, na.rm=T)/sum(N, na.rm=T), "weighted.mean.actual"=sum(N*meanActual, na.rm=T)/sum(N, na.rm=T), "tot"=sum(N))
 
 
+#FAO plotting stuff
+data.tbl$Fao.label<-data.tbl$Fao.label+1
+data.tbl$Fao.actual<-data.tbl$Fao.actual+1
+
+fao_group <- data.tbl %>%
+  group_by(Genus) %>%
+  summarise("weighted.mean.label"=sum(N*(Fao.label), na.rm=T)/sum(N),
+            "weighted.mean.actual"=sum(N*(Fao.actual), na.rm=T)/sum(N),
+            "tot"=sum(N))
+
+toplot <- fao_group %>%
+filter(weighted.mean.label!=0) %>%
+  filter(weighted.mean.actual!=0) %>%
+  filter(weighted.mean.label!=weighted.mean.actual) %>%
+  filter(tot>10)
+
+toplot[toplot$Genus=="Paralichthys",]$weighted.mean.label <- (2.90625*32+3*131)/(32+131)
+toplot[toplot$Genus=="Paralichthys",]$weighted.mean.actual <- (1.40625*32+2.3511450*131)/(32+131)
+toplot[toplot$Genus=="Paralichthys",]$tot <- 32+131
+
+toplot <- toplot[-19,]
+
+
+toplot <- cbind(toplot,c("Croaker","Sea bass", "Toothfish","Anchovy", "Grouper", "Cod",
+                         "Cusk eel", "Halibut", "Skipjack","Lemon sole", "Monkfish", "Snapper",
+                         "Haddock","Whiting", "Hake", "Pacific salmon","Seabream" ,"Flounder","Eur. pollock",
+                         "Atlantic salmon", "Mackerel","Spanish mackerel", "Rockfish", "Sole","Gilt-head bream","Tuna"))
+names(toplot)[5] <- "Common"
+toplot$Common <- factor(toplot$Common)
+toplot$Common <- reorder(toplot$Common, -toplot$weighted.mean.actual)
+
+write.csv(data.tbl, file.path(data.dir,"DataFixed9WFAO.csv")) 
+
+require(ggplot2)
+library(scales)
+library(grid)
+p <- ggplot(toplot, aes(x=Common, weighted.mean.label, weighted.mean.actual)) +
+  geom_segment(aes(x=Common, xend=Common, y=weighted.mean.label, yend=weighted.mean.actual), colour="gray") +
+  geom_point(data=toplot, aes(x=Common, y=weighted.mean.label,colour=weighted.mean.label), size=4) +
+  geom_point(aes(x=Common, y=weighted.mean.actual, colour=weighted.mean.actual), size=4) +
+  scale_y_continuous("FAO status", breaks=seq(0,5,length.out=5), labels=c("Overfished",
+                                           "Overfished/Fully exploited","Fully exploited",
+                                           "Fully exploited/Underfished", "Underfished"), expand=c(0.05,0.05)) +
+  scale_x_discrete("Common name")+
+  theme_classic() +
+  coord_flip() +
+  theme(axis.text = element_text(size=9), axis.title=element_text(size=12),
+        legend.text=element_text(size=7), axis.text.x=element_text(angle = 45, hjust = 1, size=9),
+        legend.title=element_text(size=6), plot.margin=unit(c(0,0,1,0),"cm"),
+        axis.line.x=element_line(colour="gray40", size=1),
+        axis.line.y=element_line(colour="gray40", size=1)) +
+  scale_colour_gradient(low="red", high="green", breaks=c(0.01,1.25,2.5,3.75,4.95), labels=c('O',"O/F","F","F/U", "U"), "IUCN status")
+p
+
+
+
+
+#####################################
+# IUCN plotting 
+#####################################
 
 toplot <- genera_IUCN %>%
   filter(weighted.mean.label!=0) %>%
@@ -947,6 +1053,121 @@ p <- ggplot(toplot, aes(x=Common, weighted.mean.label, weighted.mean.actual)) +
         legend.text=element_text(size=6), axis.text.x=element_text(angle = 45, hjust = 1),
         legend.title=element_text(size=6)) +
   scale_colour_gradient(low="red", high="green", breaks=-1:5, labels=c('CR',"CR","CR","EN", "VU", "NT", "LC"), "IUCN status")
+p
+
+##########################
+## FAO plot
+###########################
+require(dplyr)
+RAM_group <- data.tbl %>%
+  group_by(Genus) %>%
+  summarise("weighted.U.label"=sum(N*(RAM.U.act), na.rm=T)/sum(N),
+            "weighted.U.actual"=sum(N*(RAM.U.lab), na.rm=T)/sum(N),
+            "weighted.B.label"=sum(N*(RAM.B.act), na.rm=T)/sum(N),
+            "weighted.B.actual"=sum(N*(RAM.B.lab), na.rm=T)/sum(N),
+            "tot"=sum(N))
+
+toplot.U <- RAM_group %>%
+  filter(weighted.U.label!=0) %>%
+  filter(weighted.U.actual!=0) %>%
+  filter(weighted.U.label!=weighted.U.actual) %>%
+  filter(tot>10) %>%
+  select(Genus, weighted.U.label, weighted.U.actual, tot)
+
+toplot.U[c(3,14),]
+toplot.U[3,]$weighted.U.label <- (293*.04150171+37*.33243243)/(293+37)
+toplot.U[3,]$weighted.U.actual <- (293*.6184164+37*.5486486)/(293+37)
+toplot.U[3,]$tot <- 293+37
+toplot.U <- toplot.U[-14,]
+
+
+toplot.U[c(15,16),]
+toplot.U[15,]$weighted.U.label <- (32*.4431875+131*.7567428)/(32+131)
+toplot.U[15,]$weighted.U.actual <- (32*.9069375+131*.7524766)/(32+131)
+toplot.U[15,]$tot <- 32+131
+toplot.U <- toplot.U[-16,]
+
+
+toplot.U$Common <- c("Toothfish", "Anchovy", "Grouper", "Cod",
+                     "Cusk eel", "Halibut", "Skipjack", "Lemon sole",
+                     "Monkfish", "Snapper", "Haddock", "Whiting",
+                     "Hake", "Seabream", "Flounder", "Eur. pollock",
+                     "Mackerel", "Spanish mackerel", "Rockfish", "Tuna",
+                     "Swordfish")
+
+
+toplot.U$Common <- factor(toplot.U$Common)
+toplot.U$Common <- reorder(toplot.U$Common, toplot.U$weighted.U.actual)
+
+p <- ggplot(toplot.U, aes(x=Common, weighted.U.label, weighted.U.actual)) +
+  geom_segment(aes(x=Common, xend=Common, y=log(weighted.U.label), yend=log(weighted.U.actual)), colour="gray") +
+  geom_point(data=toplot.U, aes(x=Common, y=log(weighted.U.label),colour=weighted.U.label), size=4) +
+  geom_point(aes(x=Common, y=log(weighted.U.actual), colour=weighted.U.actual), size=4)+
+  scale_y_continuous("Overfishing status", expand=c(0.05,0.05), trans="reverse",
+                     breaks=c(-6,0,7)) +
+  scale_x_discrete("Common name")+
+  theme_classic() +
+  coord_trans(y="log")+
+  coord_flip() +
+  theme(axis.text = element_text(size=9), axis.title=element_text(size=12),
+        legend.text=element_text(size=7), 
+        legend.title=element_text(size=10), plot.margin=unit(c(0,0,1,0),"cm"),
+        axis.line.x=element_line(colour="gray40", size=1),
+        axis.line.y=element_line(colour="gray40", size=1)) +
+  scale_colour_gradient(low="red", high="green", "Overfishing status", breaks=c(-5.5,1,5), trans="reverse")
+p
+
+####################################################
+# Ram B
+toplot.B <- RAM_group %>%
+  filter(weighted.B.label!=0) %>%
+  filter(weighted.B.actual!=0) %>%
+  filter(weighted.B.label!=weighted.B.actual) %>%
+  filter(tot>10) %>%
+  select(Genus, weighted.B.label, weighted.B.actual, tot)
+
+toplot.B[c(3,13),]
+toplot.B[3,]$weighted.B.label <- (293*.36784983+37*.79948649)/(293+37)
+toplot.B[3,]$weighted.B.actual <- (293*.47518089+37*1.19518919)/(293+37)
+toplot.B[3,]$tot <- 293+37
+toplot.B <- toplot.B[-13,]
+
+
+toplot.B[c(14,15),]
+toplot.B[14,]$weighted.B.label <- (32*.66053125+131*.07114504)/(32+131)
+toplot.B[14,]$weighted.B.actual <- (32*.7916875+131*.8772519)/(32+131)
+toplot.B[14,]$tot <- 32+131
+toplot.B <- toplot.B[-15,]
+
+
+toplot.B$Common <- c("Toothfish", "Anchovy", "Grouper", "Cod",
+                     "Cusk eel", "Halibut", "Skipjack", "Lemon sole",
+                      "Snapper", "Marlin","Haddock",
+                     "Hake", "Seabream", "Flounder",
+                     "Spanish mackerel", "Rockfish", "Tuna",
+                     "Swordfish")
+
+
+toplot.B$Common <- factor(toplot.B$Common)
+toplot.B$Common <- reorder(toplot.B$Common, -toplot.B$weighted.B.actual)
+
+p <- ggplot(toplot.B, aes(x=Common, weighted.B.label, weighted.B.actual)) +
+  geom_segment(aes(x=Common, xend=Common, y=log(weighted.B.label), yend=log(weighted.B.actual)),  colour="gray") +
+  geom_point(data=toplot.B, aes(x=Common, y=log(weighted.B.label),colour=weighted.B.label), size=4) +
+  geom_point(aes(x=Common, y=log(weighted.B.actual), colour=weighted.B.actual), size=4)+
+  scale_y_continuous("Overfished status", expand=c(0.05,0.05), 
+                     breaks=c(-6,0,20)) +
+  scale_x_discrete("Common name")+
+  theme_classic() +
+  coord_trans(y="log")+
+  coord_flip() +
+  theme(axis.text = element_text(size=9), axis.title=element_text(size=12),
+        legend.text=element_text(size=7), 
+        legend.title=element_text(size=10), plot.margin=unit(c(0,0,1,0),"cm"),
+        axis.line.x=element_line(colour="gray40", size=1),
+        axis.line.y=element_line(colour="gray40", size=1)) +
+  scale_colour_gradient(low="red", high="green", "Overfished status", breaks=c(0,1,10,100)) +
+  geom_hline(yintercept=0, colour="gray50")
 p
 
 
