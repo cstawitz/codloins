@@ -117,7 +117,9 @@ names(data.tbl)[19]<- "N.per.lab"
 data.tbl <- get_mislabeling_prob(data.tbl)
 write.csv(data.tbl, file.path(data.dir,"DataFixed9.csv"))
 
-
+slice(data.tbl, unique(c(grep(" sp", data.tbl$Sci.labels)), grep(" sp", data.tbl$Sci.actuals))) %>%
+  select(N) %>%
+  sum()
 
 
 Genus <- unlist(regmatches(data.tbl$Sci.labels,regexec("[[:upper:]][[:lower:]]+",data.tbl$Sci.labels)))
